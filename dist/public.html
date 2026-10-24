@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CEI Lindolpho José da Silva | Araquari-SC</title>
+<meta name="description" content="Centro de Educação Infantil Lindolpho José da Silva, Araquari-SC: avisos, regimento, PPP, Conselho Escolar, APP, calendário, cardápio e contato.">
+<link rel="icon" type="image/png" href="logo-lindolpho.png">
+<link rel="stylesheet" href="public-home.css?v=20261023-v40">
+</head>
+<body>
+<a class="skip" href="#documentos">Ir para os documentos</a>
+<div class="top"><div class="wrap">
+  <a class="brand" href="/"><img src="logo-lindolpho.png" alt="Logo do CEI Lindolpho"><span><b>CEI Lindolpho José da Silva</b><small>Centro de Educação Infantil · Araquari-SC</small></span></a>
+  <nav class="menu" aria-label="Seções da página"><a href="#avisos" id="menuAvisos" hidden>Avisos</a><a href="#documentos">Documentos</a><a href="#sobre" id="menuSobre" hidden>Sobre</a><a href="#contato">Contato</a><a class="restrito" href="/restrito?entrada=2">Área restrita →</a></nav>
+</div></div>
+<div class="crayons" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+
+<main id="conteudo">
+  <section class="hero"><div class="wrap">
+    <span class="eyebrow">Comunidade escolar</span>
+    <h1>Informações e documentos do nosso CEI</h1>
+    <p class="lead">Avisos da direção, regimento, projeto político-pedagógico, Conselho Escolar, APP, calendário e cardápio, reunidos para as famílias e a comunidade.</p>
+    <label class="search"><span class="skip">Pesquisar documentos</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Procure um documento: regimento, PPP, cardápio…" autocomplete="off" aria-label="Pesquisar documentos públicos"></label>
+    <div class="chips" id="chips" aria-label="Filtrar por seção"></div>
+  </div></section>
+
+  <section class="block" id="avisos" hidden><div class="wrap">
+    <h2>Avisos</h2><p class="sub">Comunicados da direção para as famílias.</p>
+    <div class="notices" id="notices"></div>
+  </div></section>
+
+  <section class="block" id="documentos"><div class="wrap">
+    <h2>Documentos do CEI</h2><p class="sub" id="docsSub">Clique em “Abrir” para ver, baixar ou imprimir.</p>
+    <div id="docs"><p class="status">Carregando documentos…</p></div>
+  </div></section>
+
+  <section class="block" id="sobre" hidden><div class="wrap two" id="sobreGrid"></div></section>
+
+  <section class="block" id="contato"><div class="wrap two">
+    <div class="card contact" id="contactCard"><h3>Fale com o CEI</h3><dl id="contactList"><div><dt>Telefone</dt><dd><a href="tel:+554734522185">(47) 3452-2185</a></dd></div></dl></div>
+    <div class="card"><h3>Atendimento às famílias</h3><p>Para informações sobre uma criança, documentos individuais, declarações ou atendimento, fale diretamente com a secretaria do CEI pelos contatos ao lado.</p><p>Os documentos desta página são públicos. Informações pessoais de crianças e famílias nunca são publicadas aqui.</p></div>
+  </div></section>
+</main>
+
+<footer class="site"><div class="wrap"><span id="footAddr">CEI Lindolpho José da Silva · Araquari-SC</span><a href="/restrito?entrada=2">Área restrita da equipe</a></div></footer>
+
+<script>
+(() => {
+const CATS = {
+  regimento: {label: 'Regimento interno', ico: '📘', c: 'var(--blue)', hint: 'Normas de funcionamento da unidade'},
+  ppp: {label: 'Projeto Político-Pedagógico (PPP)', ico: '🎯', c: 'var(--purple)', hint: 'Proposta pedagógica do CEI'},
+  conselho: {label: 'Conselho Escolar', ico: '🤝', c: 'var(--green)', hint: 'Regimento, editais e atas'},
+  app: {label: 'APP — Associação de Pais e Professores', ico: '👨‍👩‍👧', c: 'var(--orange)', hint: 'Estatuto, atas e prestação de contas'},
+  calendario: {label: 'Calendário escolar', ico: '📅', c: 'var(--red)', hint: 'Datas letivas, feriados e eventos'},
+  cardapio: {label: 'Cardápio', ico: '🍎', c: 'var(--teal)', hint: 'Alimentação escolar'},
+  comunicados: {label: 'Comunicados e informativos', ico: '📣', c: 'var(--yellow)', hint: 'Informativos às famílias'},
+  outros: {label: 'Outros documentos', ico: '📄', c: 'var(--sky)', hint: 'Demais documentos públicos'},
+};
+const safe = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const br = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : (m ? `${m}/${y}` : ''); };
+const longDate = iso => { const [y, m, d] = String(iso || '').split('-').map(Number); return y && m && d ? new Intl.DateTimeFormat('pt-BR', {day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'}).format(new Date(Date.UTC(y, m - 1, d))) : ''; };
+const size = b => b > 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round((b || 0) / 1024)) + ' KB';
+const type = m => ({'application/pdf': 'PDF', 'image/jpeg': 'Imagem', 'image/png': 'Imagem'}[m] || 'Arquivo');
+const viewable = m => ['application/pdf', 'image/jpeg', 'image/png'].includes(m);
+let materials = [], cat = '';
+const q = document.getElementById('q');
+
+function docItem(m, showCat) {
+  const c = CATS[m.category] || CATS.outros, url = `/api/public/file/${encodeURIComponent(m.id)}`;
+  return `<li class="doc" style="--c:${c.c}"><div>${showCat ? `<span class="cat-name">${c.ico} ${safe(c.label)}</span>` : ''}<b>${safe(m.title)}</b>${m.description ? `<span class="desc">${safe(m.description)}</span>` : ''}<small>${[br(m.date), type(m.mime), m.size ? size(m.size) : ''].filter(Boolean).join(' · ')}</small></div>${viewable(m.mime) ? `<a class="open" href="${url}?view=1" target="_blank" rel="noopener">Abrir</a>` : `<a class="open dl" href="${url}">Baixar</a>`}</li>`;
+}
+function render() {
+  const words = norm(q.value).trim().split(/\s+/).filter(Boolean);
+  const byCat = {}; materials.forEach(m => { (byCat[m.category] = byCat[m.category] || []).push(m); });
+  document.getElementById('chips').innerHTML = materials.length ? `<button type="button" class="${cat ? '' : 'on'}" data-cat="">Todos <span class="n">${materials.length}</span></button>` + Object.keys(CATS).filter(k => byCat[k]).map(k => `<button type="button" class="${cat === k ? 'on' : ''}" data-cat="${k}">${CATS[k].ico} ${safe(CATS[k].label.split(' — ')[0].replace(' (PPP)', ''))} <span class="n">${byCat[k].length}</span></button>`).join('') : '';
+  const el = document.getElementById('docs');
+  if (!materials.length) { el.innerHTML = '<div class="empty">Os documentos públicos do CEI serão disponibilizados aqui pela direção.</div>'; return; }
+  const list = materials.filter(m => (!cat || m.category === cat) && words.every(w => norm([m.title, m.description, CATS[m.category]?.label, br(m.date)].join(' ')).includes(w)));
+  document.getElementById('docsSub').textContent = words.length || cat ? `${list.length} documento(s) encontrado(s).` : 'Clique em “Abrir” para ver, baixar ou imprimir.';
+  if (!list.length) { el.innerHTML = '<div class="empty">Nenhum documento encontrado. Tente outra palavra ou fale com a secretaria do CEI.</div>'; return; }
+  if (words.length) { el.innerHTML = `<ul class="results docs">${list.map(m => docItem(m, true)).join('')}</ul>`; return; }
+  el.innerHTML = '<div class="cats">' + Object.entries(CATS).filter(([k]) => list.some(m => m.category === k)).map(([k, c]) => { const items = list.filter(m => m.category === k).sort((a, b) => String(b.date).localeCompare(String(a.date))); return `<article class="cat" style="--c:${c.c}"><header><span class="ico" aria-hidden="true">${c.ico}</span><div><h3>${safe(c.label)}</h3><small>${safe(c.hint)} · ${items.length} documento(s)</small></div></header><ul class="docs">${items.map(m => docItem(m, false)).join('')}</ul></article>`; }).join('') + '</div>';
+}
+document.getElementById('chips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; cat = b.dataset.cat; render(); });
+q.addEventListener('input', render);
+
+function renderNotices(list) {
+  const sec = document.getElementById('avisos');
+  sec.hidden = !list.length; document.getElementById('menuAvisos').hidden = !list.length;
+  document.getElementById('notices').innerHTML = list.map(n => `<article class="notice ${n.pinned ? 'pinned' : ''}">${n.pinned ? '<span class="tag">Importante</span>' : ''}<time datetime="${safe(n.date)}">${safe(longDate(n.date))}</time><h3>${safe(n.title)}</h3>${n.body ? `<p>${safe(n.body)}</p>` : ''}</article>`).join('');
+}
+function renderInfo(i) {
+  const rows = [];
+  if (i.phone) rows.push(['Telefone', `<a href="tel:+55${safe(i.phone.replace(/\D/g, ''))}">${safe(i.phone)}</a>`]);
+  if (i.email) rows.push(['E-mail', `<a href="mailto:${safe(i.email)}">${safe(i.email)}</a>`]);
+  if (i.hours) rows.push(['Horário de funcionamento', safe(i.hours)]);
+  if (i.address) rows.push(['Endereço', safe(i.address)]);
+  const btns = [i.whatsapp ? `<a class="wa" href="https://wa.me/${safe(i.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a>` : '', i.phone ? `<a href="tel:+55${safe(i.phone.replace(/\D/g, ''))}">Ligar</a>` : '', i.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(i.address)}" target="_blank" rel="noopener">Ver no mapa</a>` : ''].join('');
+  document.getElementById('contactCard').innerHTML = `<h3>Fale com o CEI</h3><dl>${rows.map(([t, d]) => `<div><dt>${t}</dt><dd>${d}</dd></div>`).join('')}</dl>${btns ? `<div class="btns">${btns}</div>` : ''}`;
+  const blocks = [];
+  if (i.about) blocks.push(`<div class="card"><h3>Sobre o CEI</h3><p>${safe(i.about)}</p></div>`);
+  if (i.vagas) blocks.push(`<div class="card"><h3>Vagas e matrículas</h3><p>${safe(i.vagas)}</p></div>`);
+  document.getElementById('sobre').hidden = !blocks.length; document.getElementById('menuSobre').hidden = !i.about;
+  document.getElementById('sobreGrid').innerHTML = blocks.join('');
+  if (blocks.length === 1) document.getElementById('sobreGrid').style.gridTemplateColumns = '1fr';
+  if (i.address) document.getElementById('footAddr').textContent = 'CEI Lindolpho José da Silva · ' + i.address;
+}
+fetch('/api/public/home', {cache: 'no-store'}).then(r => { if (!r.ok) throw Error(); return r.json(); }).then(d => {
+  materials = d.materials || []; renderNotices(d.notices || []); renderInfo(d.info || {}); render();
+}).catch(() => { document.getElementById('docs').innerHTML = '<div class="empty">Não foi possível carregar os documentos agora. Tente novamente em instantes.</div>'; });
+})();
+</script>
+</body></html>

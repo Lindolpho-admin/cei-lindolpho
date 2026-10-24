@@ -1,0 +1,9 @@
+{
+ "private": true,
+ "type": "module",
+ "scripts": {
+  "dev": "PORT=4173 PUBLIC_ORIGIN=http://terminal.local:4173 node scripts/portable-server.mjs",
+  "preview": "node scripts/preview-local.mjs",
+  "preview:professor": "node scripts/preview-local.mjs professor"
+ }
+}

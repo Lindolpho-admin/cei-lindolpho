@@ -1,0 +1,16 @@
+// Configuração do Cloudflare Workers (plano gratuito). Ver documentacao/08_HOSPEDAGEM_CLOUDFLARE.md.
+// Não é preciso editar este arquivo: o e-mail da administração e a senha do primeiro acesso
+// são cadastrados no painel do Cloudflare (Settings → Variables and Secrets).
+{
+  "name": "cei-lindolpho",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2025-09-01",
+  "workers_dev": true,
+  "keep_vars": true,
+  "r2_buckets": [
+    { "binding": "BUCKET", "bucket_name": "cei-lindolpho-dados" }
+  ],
+  "vars": {
+    "AUTH_PROVIDER": "senha"
+  }
+}
