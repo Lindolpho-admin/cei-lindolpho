@@ -1,0 +1,91 @@
+/* Identidade visual única do CEI Lindolpho (v43) — mesma da página pública:
+   azul do logo, cores dos gizes de cera, fundo creme, cantos arredondados.
+   Carregado por último na área restrita; sobrepõe style.css e central.css. */
+:root{
+  --blue:#2f56b0;--blue-deep:#1d3b82;--blue-soft:#e9efff;--ink:#1c2a44;--muted:#5b6b82;--line:#e3e8f1;--paper:#fffdf8;--soft:#f4f7fc;
+  --red:#e0483b;--orange:#f08a2c;--yellow:#f2c230;--green:#3f9a4b;--purple:#8a4fd6;--sky:#3b8fd9;--teal:#1f9a93;
+  --heading:"Trebuchet MS","Segoe UI",system-ui,sans-serif;
+  /* tokens usados por central.css */
+  --cx-navy:#1d3b82;--cx-blue:#2f56b0;--cx-blue-strong:#1d3b82;--cx-ink:#1c2a44;--cx-muted:#5b6b82;--cx-line:#e3e8f1;--cx-soft:#f4f7fc;
+}
+body{background:var(--paper)!important;color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif}
+
+/* Menu lateral */
+aside{background:linear-gradient(180deg,#1d3b82 0%,#1a3576 60%,#172f69 100%)!important;position:relative}
+aside::before{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:linear-gradient(90deg,var(--red) 0 16.6%,var(--sky) 16.6% 33.3%,var(--green) 33.3% 50%,var(--purple) 50% 66.6%,var(--yellow) 66.6% 83.3%,var(--orange) 83.3% 100%)}
+.brand img{background:#fff;border-radius:14px}
+.brand span,.brand b{font-family:var(--heading)}
+.brand b{color:#ffd66b!important}
+#nav .cx-nav-group{color:#a9bce6!important}
+#nav button{color:#dbe5fb!important;border-radius:12px!important}
+#nav button:hover{background:rgba(255,255,255,.1)!important;color:#fff!important}
+#nav button.active{background:#fff!important;color:var(--blue-deep)!important;box-shadow:0 6px 16px rgba(10,25,70,.25)!important;font-weight:700}
+#nav button .cx-count{background:var(--yellow)}
+.cx-nav-footer{border-top-color:rgba(255,255,255,.15)!important}
+
+/* Títulos e texto */
+header h1,#title,.panel h2,.cx-head h2,.cx-hero h2,.card h3,.modal-card h2{font-family:var(--heading);color:var(--blue-deep)}
+header h1,#title{font-weight:800;letter-spacing:-.3px}
+header p,#subtitle{color:var(--muted)}
+.muted,.hint{color:var(--muted)}
+
+/* Cartões e painéis */
+.panel,.card,.cx-item,.cx-folder,.cx-account,.cx-model,.cx-stat,.cx-teacher-cards button,.model-card,.app-archive-item{background:#fff;border-color:var(--line)!important;border-radius:18px!important}
+.panel{box-shadow:0 4px 18px rgba(29,59,130,.05)}
+.cx-item{border-radius:14px!important}
+.cx-item:hover,.cx-folder:hover,.cx-account:hover,.cx-model:hover{border-color:#c3d1ef!important}
+.cx-folder.active,.app-folder-nav button.active{background:var(--blue-deep)!important;border-color:var(--blue-deep)!important}
+.cx-account.active{outline:2px solid var(--blue)!important}
+.stat b,.cx-stat b,.cx-account .cx-big{color:var(--blue-deep)}
+
+/* Início e faixas de destaque */
+.cx-hero{background:radial-gradient(600px 220px at 100% 0%,rgba(255,255,255,.12),transparent 70%),linear-gradient(135deg,#1d3b82,#2f56b0)!important;border-radius:20px!important;position:relative;overflow:hidden}
+.cx-hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:6px;background:linear-gradient(90deg,var(--red) 0 16.6%,var(--sky) 16.6% 33.3%,var(--green) 33.3% 50%,var(--purple) 50% 66.6%,var(--yellow) 66.6% 83.3%,var(--orange) 83.3% 100%)}
+.cx-process{background:#f6f9ff!important;border-color:#cfdcf2!important;border-radius:16px!important}
+
+/* Botões */
+.primary,button.primary,.cx-btn.primary,.actions .primary,#waitModal .actions button.primary,#historyModal .actions button.primary{background:var(--blue)!important;border-color:var(--blue)!important;color:#fff!important;border-radius:10px!important}
+.primary:hover,button.primary:hover,.cx-btn.primary:hover{background:var(--blue-deep)!important;border-color:var(--blue-deep)!important}
+.cx-btn,.actions button{border-radius:10px!important}
+.cx-btn:not(.primary):not(.danger):hover{border-color:#b9c7e6;background:var(--soft)}
+
+/* Abas */
+.docs-tabs{background:var(--blue-soft)!important;border-radius:14px!important}
+.docs-tabs button.active,.library-tabs button.active{background:#fff!important;color:var(--blue-deep)!important;box-shadow:0 3px 10px rgba(29,59,130,.1)}
+.library-tabs button.active,.library-tabs button.primary{background:var(--blue-deep)!important;color:#fff!important}
+
+/* Etiquetas */
+.cx-chip{background:var(--blue-soft);color:#2a4a95}
+.cx-chip.ok{background:#e6f5e8;color:#2c7a37}
+.cx-chip.warn{background:#fff3d6;color:#8a5a00}
+.cx-chip.bad{background:#fdeceb;color:#b3261e}
+.cx-chip.pub{background:#f1e9fc;color:#6a3bb0}
+.badge{background:#e6f5e8;color:#2c7a37}
+
+/* Formulários */
+input,select,textarea{border-color:#d3dcea}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue)!important;box-shadow:0 0 0 3px #dfe8ff}
+.cx-search input{border:2px solid #d6def0!important;border-radius:16px!important}
+.cx-search input:focus{border-color:var(--blue)!important}
+
+/* Tabelas */
+.table th,.cx-table th{color:#5b6b82;background:transparent}
+.table tr:hover td{background:#fafbff}
+
+/* Janelas */
+.modal-card{border-radius:20px!important}
+.modal-card{background:linear-gradient(90deg,var(--red) 0 16.6%,var(--sky) 16.6% 33.3%,var(--green) 33.3% 50%,var(--purple) 50% 66.6%,var(--yellow) 66.6% 83.3%,var(--orange) 83.3% 100%) top/100% 5px no-repeat,#fff!important}
+
+/* Avisos e mensagens */
+.save-notice{background:var(--green)!important;border-radius:12px!important}
+
+/* Botão de menu no celular */
+.cx-menu-btn{border-radius:12px;border-color:var(--line);color:var(--blue-deep)}
+.cx-hero h2{color:#fff!important}
+/* Botões simples das telas antigas (biblioteca, lista de espera, ofícios) */
+main button:not([class]),main .oficio-row-actions button:not(.primary):not(.danger),.modal-card .actions button:not(.primary){background:#fff;border:1px solid #d3dcea;color:#1c2a44;border-radius:9px;padding:7px 12px;cursor:pointer;font:inherit;font-size:13px;font-weight:600}
+main button:not([class]):hover,main .oficio-row-actions button:not(.primary):not(.danger):hover{background:var(--soft);border-color:#b9c7e6}
+main button.danger,main .danger:not(.cx-chip){color:#b3261e!important;border-color:#f0c7c2!important;background:#fff}
+.docs-tabs button:not(.active){background:transparent!important;border:0!important;color:#4a5b75!important}
+.docs-tabs button{padding:10px 16px!important;font-size:14px!important}
+.docs-section-head h3,.empty-category h3,.panel h3{font-family:var(--heading);color:var(--blue-deep)}

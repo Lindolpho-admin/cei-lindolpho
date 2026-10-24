@@ -256,7 +256,7 @@ function cxRenderDashboard(a) {
   const hoje = cxToday();
   a.innerHTML = `<section class="cx-hero"><h2>Olá! O que você procura?</h2><p>Atas, orçamentos, notas, extratos, ofícios, encaminhamentos — tudo é pesquisado no Arquivo central.</p>
     <form class="cx-search" onsubmit="event.preventDefault();cxGo('arquivo',{});cx_setQuery(this.q.value)"><input name="q" type="search" placeholder="Ex.: ata conselho março, orçamento ventilador, nota fiscal Sicoob…" aria-label="Pesquisar no arquivo"></form>
-    <div class="cx-btns"><button class="cx-btn" onclick="cxOpenUpload()">⬆ Enviar documentos</button><button class="cx-btn" onclick="cxOpenMinute()">✎ Redigir ata</button><button class="cx-btn" onclick="cxOpenUpload({kind:'nota_fiscal',area:'financeiro'})">🧾 Lançar nota fiscal</button><button class="cx-btn" onclick="cxOpenTimbrado('comunicado')">📄 Novo comunicado</button><button class="cx-btn" onclick="newOficio()">✉ Novo ofício</button></div></section>
+    <div class="cx-btns"><button class="cx-btn" onclick="cxOpenUpload()">⬆ Enviar documentos</button><button class="cx-btn" onclick="cxOpenMinute()">✎ Redigir ata</button><button class="cx-btn" onclick="cxOpenUpload({kind:'nota_fiscal',area:'financeiro'})">🧾 Lançar nota fiscal</button><button class="cx-btn" onclick="cxOpenTimbrado('comunicado')">📄 Novo comunicado</button><button class="cx-btn" onclick="cxGoDecl()">🕒 Declaração de comparecimento</button><button class="cx-btn" onclick="newOficio()">✉ Novo ofício</button></div></section>
     <div class="cx-cols"><div class="panel" style="margin-top:0"><h2>Precisa de atenção</h2><ul class="cx-todo" id="cxTodo"><li class="muted">Carregando…</li></ul></div>
     <div class="panel" style="margin-top:0"><div class="cx-head"><h2>Saldos ${cxEsc(cx.finYear)}</h2><button class="cx-btn small" onclick="cxGo('financeiro')">Ver financeiro</button></div><div id="cxDashSaldos" class="muted">Carregando…</div></div></div>
     <div class="panel"><div class="cx-head"><h2>Enviados recentemente</h2><button class="cx-btn small" onclick="cxGo('arquivo',{})">Abrir arquivo</button></div><div id="cxRecent" class="muted">Carregando…</div></div>
@@ -285,6 +285,7 @@ function cxRenderDashboard(a) {
     cxUpdateBadges();
   }).catch(e => { const t = document.getElementById('cxTodo'); if (t) t.innerHTML = `<li class="muted">${cxEsc(e.message)}</li>`; });
 }
+window.cxGoDecl = () => { state.view = 'documentos'; if (typeof documentosTab !== 'undefined') documentosTab = 'declaracoes'; render(); setTimeout(() => cxOpenDecl('comparecimento'), 50); };
 window.cx_setQuery = q => { cx.filter.q = q || ''; const i = document.getElementById('cxQ'); if (i) { i.value = cx.filter.q; cxFilter(); } };
 
 /* ---------- Arquivo central ---------- */
@@ -373,6 +374,7 @@ function cxItemHTML(x, compact = false) {
 window.cxEditGenerated = id => {
   const g = (state.generatedDocs || []).find(x => x.id === id);
   if (g?.template === 'documentoTimbrado') return cxOpenTimbrado(null, id);
+  if (g?.template === 'declaracao' && g.data?.v === 1) return cxOpenDecl(null, id);
   if (g?.template === 'relatorioAvaliativo' && typeof openChildReport === 'function') return openChildReport(id);
   if (g?.template === 'meimei' && typeof editMeimei === 'function' && (state.encaminhamentosMeimei || []).some(m => m.id === id)) return editMeimei(id);
   return reopenGenerated(id);
@@ -678,8 +680,114 @@ window.cxDeleteTimbrado = async id => {
 };
 // Visualizar / editar pelos fluxos já existentes
 const cxPrevPreview = window.previewGenerated, cxPrevReopen = window.reopenGenerated;
-window.previewGenerated = id => { const g = (state.generatedDocs || []).find(x => x.id === id); if (g?.template === 'documentoTimbrado') return cxPrintTimbrado(g); return cxPrevPreview(id); };
-window.reopenGenerated = id => { const g = (state.generatedDocs || []).find(x => x.id === id); if (g?.template === 'documentoTimbrado') return cxOpenTimbrado(null, id); return cxPrevReopen(id); };
+window.previewGenerated = id => { const g = (state.generatedDocs || []).find(x => x.id === id); if (g?.template === 'documentoTimbrado') return cxPrintTimbrado(g); if (g?.template === 'declaracao' && g.data?.v === 1) return cxPrintDecl(g); return cxPrevPreview(id); };
+window.reopenGenerated = id => { const g = (state.generatedDocs || []).find(x => x.id === id); if (g?.template === 'documentoTimbrado') return cxOpenTimbrado(null, id); if (g?.template === 'declaracao' && g.data?.v === 1) return cxOpenDecl(null, id); return cxPrevReopen(id); };
+
+/* ---------- Declarações (v44) ---------- */
+const CX_DECL_MODELS = {
+  comparecimento: {ico: '🕒', label: 'Declaração de comparecimento', hint: 'Pais ou responsáveis que estiveram no CEI (reunião, atendimento, matrícula…)', title: 'DECLARAÇÃO DE COMPARECIMENTO'},
+  livre: {ico: '📄', label: 'Declaração (texto livre)', hint: 'Qualquer outra declaração da direção, no papel timbrado', title: 'DECLARAÇÃO'},
+};
+const CX_DECL_MOTIVOS = ['participar de reunião de pais e responsáveis', 'atendimento com a direção', 'atendimento com a coordenação pedagógica', 'atendimento com a professora da turma', 'tratar de matrícula / vaga', 'entregar ou retirar documentos', 'buscar a criança por motivo de saúde', 'participar de evento promovido pelo CEI'];
+const CX_DECL_FINS = ['comprovação junto ao empregador', 'justificativa de ausência no trabalho', 'comprovação junto a órgão público', 'apresentação onde se fizer necessário'];
+function cxDeclText(d) {
+  const fem = ['mãe', 'avó'].includes(d.parentesco), masc = ['pai', 'avô'].includes(d.parentesco), g = (f, m, n) => (fem ? f : masc ? m : n);
+  const quem = [`<b>${cxEsc(d.nome || '________________________________')}</b>`];
+  if (d.documento) quem.push(`${g('portadora', 'portador', 'portador(a)')} do documento ${cxEsc(d.documento)}`);
+  if (d.crianca) quem.push(`${d.parentesco ? cxEsc(d.parentesco) : 'responsável'} pela criança <b>${cxEsc(d.crianca)}</b>${d.turma ? `, matriculada na turma ${cxEsc(d.turma)}` : ''}`);
+  const quando = `no dia ${cxEsc(cxLongDate(d.dia) || '___ de __________ de ______')}${d.inicio ? (d.fim ? `, das ${cxEsc(d.inicio)} às ${cxEsc(d.fim)}` : `, às ${cxEsc(d.inicio)}`) : ''}`;
+  const motivo = d.motivo === 'outro' ? (d.motivoOutro || '__________') : d.motivo;
+  const fim = d.fins;
+  return `<p style="text-align:justify">Declaramos, para os devidos fins, que ${quem.join(', ')}, compareceu ao Centro de Educação Infantil Lindolpho José da Silva ${quando}, para ${cxEsc(motivo)}.</p>`
+    + (fim ? `<p style="text-align:justify">A presente declaração é emitida a pedido ${g('da interessada', 'do interessado', 'do(a) interessado(a)')}, para fins de ${cxEsc(fim)}.</p>` : '')
+    + '<p style="text-align:justify">Por ser expressão da verdade, firmamos a presente declaração.</p>';
+}
+function cxDeclDocs() { return (state.generatedDocs || []).filter(g => g.template === 'declaracao').sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt))); }
+function cxRenderDeclaracoes(root) {
+  root.innerHTML = `<div class="docs-section-head"><div><h3>Declarações</h3><p>Declarações no papel timbrado, com data por extenso e assinatura da direção. Ficam arquivadas e podem ser reimpressas.</p></div><button class="primary" onclick="cxOpenDecl('comparecimento')">+ Declaração de comparecimento</button></div>
+    <div class="cx-models">${Object.entries(CX_DECL_MODELS).map(([k, v]) => `<button class="cx-model" onclick="cxOpenDecl('${k}')"><span class="cx-ico">${v.ico}</span><b>${v.label}</b><small>${v.hint}</small></button>`).join('')}</div>
+    <div class="panel"><div class="cx-head"><h2>Declarações emitidas</h2><input id="cxDeclQ" type="search" placeholder="Pesquisar por nome, criança, data…" oninput="cxFilterDecl()" style="min-width:240px"></div><div id="cxDeclList" style="margin-top:12px"></div></div>`;
+  cxFilterDecl();
+}
+window.cxFilterDecl = () => {
+  const el = document.getElementById('cxDeclList'); if (!el) return;
+  const q = cxNorm(document.getElementById('cxDeclQ')?.value || '');
+  const docs = cxDeclDocs().filter(g => !q || cxNorm([g.name, g.reference, g.data?.crianca, g.data?.turma, cxBR(g.data?.dia)].join(' ')).includes(q));
+  el.innerHTML = docs.length ? docs.map(g => { const d = g.data || {}; const legacy = d.v !== 1; return `<article class="cx-item"><div><div class="cx-chips"><span class="cx-chip">${cxEsc(CX_DECL_MODELS[d.model]?.label || 'Declaração')}</span></div><h4>${cxEsc(d.nome || g.reference || g.name)}</h4><div class="cx-meta">${d.dia ? `<span>Compareceu em ${cxEsc(cxBR(d.dia))}</span>` : ''}${d.crianca ? `<span>Criança: ${cxEsc(d.crianca)}${d.turma ? ' · ' + cxEsc(d.turma) : ''}</span>` : ''}<span>Emitida em ${cxEsc(cxBR(d.emissao) || g.date || '')}</span></div></div><div class="cx-actions"><button class="cx-btn small" onclick="previewGenerated('${g.id}')">Imprimir</button>${legacy ? '' : `<button class="cx-btn small" onclick="cxOpenDecl(null,'${g.id}')">Editar</button><button class="cx-btn small" onclick="cxOpenDecl(null,'${g.id}',true)">Nova a partir desta</button>`}<button class="cx-btn small danger" onclick="cxDeleteTimbrado('${g.id}')">Excluir</button></div></article>`; }).join('') : '<div class="cx-empty">Nenhuma declaração emitida ainda.</div>';
+};
+const cxSigner = () => { try { return JSON.parse(localStorage.getItem('cei-decl-assinante') || 'null') || {}; } catch { return {}; } };
+window.cxOpenDecl = (model, id, copy) => {
+  const g = id ? (state.generatedDocs || []).find(x => x.id === id) : null;
+  const d = g ? structuredClone(g.data) : {model: model || 'comparecimento', dia: cxToday(), emissao: cxToday(), motivo: CX_DECL_MOTIVOS[0], fins: CX_DECL_FINS[0], ...cxSigner()};
+  if (copy) { d.nome = ''; d.documento = ''; d.crianca = ''; d.turma = ''; d.emissao = cxToday(); d.textoEditado = false; }
+  const key = d.model || 'comparecimento', livre = key === 'livre', editing = g && !copy;
+  const opt = (list, val, otherVal) => list.map(x => `<option ${x === val ? 'selected' : ''}>${cxEsc(x)}</option>`).join('') + `<option value="outro" ${val === 'outro' || (val && !list.includes(val) && val !== '') ? 'selected' : ''}>Outro (escrever)</option>`;
+  cxModal(`<h2>${editing ? 'Editar' : 'Nova'}: ${cxEsc(CX_DECL_MODELS[key].label)}</h2>
+  <form class="cx-form" id="cxDeclForm" oninput="cxDeclPreview()" onchange="cxDeclPreview()" onsubmit="cxSaveDecl(event,'${editing ? g.id : ''}','${key}')">
+    ${livre ? '' : `<label class="full">Nome de quem compareceu *<input name="nome" required maxlength="160" value="${cxEsc(d.nome || '')}" placeholder="Ex.: Ana Paula da Silva"></label>
+    <label>Documento (opcional)<input name="documento" maxlength="60" value="${cxEsc(d.documento || '')}" placeholder="Ex.: CPF 000.000.000-00"></label>
+    <label>Relação com a criança<select name="parentesco">${['mãe', 'pai', 'responsável', 'avó', 'avô', 'tio(a)'].map(x => `<option ${x === (d.parentesco || 'responsável') ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+    <label>Criança (opcional)<input name="crianca" maxlength="160" value="${cxEsc(d.crianca || '')}"></label>
+    <label>Turma (opcional)<input name="turma" maxlength="80" value="${cxEsc(d.turma || '')}" placeholder="Ex.: Maternal II"></label>
+    <label>Data do comparecimento *<input type="date" name="dia" required value="${cxEsc(d.dia || cxToday())}"></label>
+    <div class="cx-btns" style="gap:8px"><label style="flex:1">Chegada<input type="time" name="inicio" value="${cxEsc(d.inicio || '')}"></label><label style="flex:1">Saída<input type="time" name="fim" value="${cxEsc(d.fim || '')}"></label></div>
+    <label>Motivo *<select name="motivo">${opt(CX_DECL_MOTIVOS, CX_DECL_MOTIVOS.includes(d.motivo) || !d.motivo ? d.motivo : 'outro')}</select></label>
+    <label data-other="motivo">Qual motivo?<input name="motivoOutro" maxlength="200" value="${cxEsc(d.motivoOutro || (CX_DECL_MOTIVOS.includes(d.motivo) ? '' : d.motivo || ''))}"></label>
+    <label>Finalidade<select name="fins">${opt(CX_DECL_FINS, CX_DECL_FINS.includes(d.fins) || !d.fins ? d.fins : 'outro')}</select></label>
+    <label data-other="fins">Qual finalidade?<input name="finsOutro" maxlength="200" value="${cxEsc(d.finsOutro || (CX_DECL_FINS.includes(d.fins) ? '' : d.fins || ''))}"></label>`}
+    <div class="full"><label style="margin-bottom:6px!important">Texto da declaração ${livre ? '*' : '<small class="muted">(montado automaticamente; você pode ajustar)</small>'}</label>${cxEditorHTML('cxDeclBody', d.textoEditado || livre ? (d.bodyHtml || '<p>Declaramos, para os devidos fins, que </p><p>Por ser expressão da verdade, firmamos a presente declaração.</p>') : '')}</div>
+    ${livre ? '' : `<p class="hint full" id="cxDeclAuto">${d.textoEditado ? 'Você editou o texto; mudanças nos campos acima não alteram mais o texto. <a href="#" onclick="event.preventDefault();cxDeclReset()">Voltar ao texto automático</a>' : ''}</p>`}
+    <label>Data da emissão *<input type="date" name="emissao" required value="${cxEsc(d.emissao || cxToday())}"></label>
+    <span></span>
+    <label>Quem assina *<input name="assinante" required maxlength="120" value="${cxEsc(d.assinante || '')}" placeholder="Nome do(a) diretor(a)"></label>
+    <label>Cargo *<input name="cargo" required maxlength="120" value="${cxEsc(d.cargo || 'Diretor(a)')}"></label>
+    <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button type="submit" value="save">Salvar</button><button class="primary" type="submit" value="print">Salvar e imprimir</button></div>
+  </form>`);
+  const form = document.getElementById('cxDeclForm');
+  form.dataset.edited = d.textoEditado || livre ? '1' : '';
+  form.addEventListener('submit', ev => { form.dataset.go = ev.submitter?.value || 'save'; }, true);
+  document.getElementById('cxDeclBody').addEventListener('input', ev => { ev.stopPropagation(); if (!livre) { form.dataset.edited = '1'; document.getElementById('cxDeclAuto').innerHTML = 'Você editou o texto; mudanças nos campos acima não alteram mais o texto. <a href="#" onclick="event.preventDefault();cxDeclReset()">Voltar ao texto automático</a>'; } });
+  cxDeclPreview();
+};
+function cxDeclRead(form) {
+  const f = n => form[n]?.value?.trim?.() ?? '';
+  return {nome: f('nome'), documento: f('documento'), parentesco: f('parentesco'), crianca: f('crianca'), turma: f('turma'), dia: f('dia'), inicio: f('inicio'), fim: f('fim'),
+    motivo: f('motivo') === 'outro' ? f('motivoOutro') : f('motivo'), motivoOutro: f('motivoOutro'), fins: f('fins') === 'outro' ? f('finsOutro') : f('fins'), finsOutro: f('finsOutro'),
+    emissao: f('emissao'), assinante: f('assinante'), cargo: f('cargo')};
+}
+window.cxDeclPreview = () => {
+  const form = document.getElementById('cxDeclForm'); if (!form) return;
+  form.querySelectorAll('[data-other]').forEach(l => { l.hidden = form[l.dataset.other]?.value !== 'outro'; });
+  if (form.dataset.edited || !form.nome) return;
+  const d = cxDeclRead(form);
+  document.getElementById('cxDeclBody').innerHTML = cxDeclText({...d, motivo: d.motivo || '__________', fins: d.fins});
+};
+window.cxDeclReset = () => { const form = document.getElementById('cxDeclForm'); form.dataset.edited = ''; document.getElementById('cxDeclAuto').innerHTML = ''; cxDeclPreview(); };
+window.cxSaveDecl = async (e, id, model) => {
+  e.preventDefault(); const form = e.target, print = form.dataset.go === 'print';
+  const d = {v: 1, model, ...cxDeclRead(form)};
+  const ed = document.getElementById('cxDeclBody');
+  if (model !== 'livre' && (!d.nome || !d.dia || !d.motivo)) return alert('Preencha o nome, a data e o motivo do comparecimento.');
+  if (!ed.textContent.trim()) return alert('O texto da declaração está vazio.');
+  d.textoEditado = !!form.dataset.edited; d.bodyHtml = cxSanitize(ed.innerHTML);
+  try { localStorage.setItem('cei-decl-assinante', JSON.stringify({assinante: d.assinante, cargo: d.cargo})); } catch {}
+  const popup = print ? window.open('', '_blank') : null; if (popup) popup.document.write('<p>Salvando…</p>');
+  try {
+    if (typeof sharedActive !== 'undefined' && !sharedActive) throw new Error('Sem conexão com o servidor. Use “Reconectar” no menu e tente de novo.');
+    const now = new Date().toISOString(); state.generatedDocs = state.generatedDocs || [];
+    const idx = id ? state.generatedDocs.findIndex(g => g.id === id) : -1, old = idx >= 0 ? state.generatedDocs[idx] : null;
+    const rec = {ownerEmail: old?.ownerEmail || CX_SESSION.email, id: old?.id || cxId(), template: 'declaracao', name: `${CX_DECL_MODELS[model].label}${d.nome ? ' — ' + d.nome : ''}`, date: typeof formatDate === 'function' ? formatDate(d.emissao) : cxBR(d.emissao), reference: d.nome ? d.nome + (d.crianca ? ' (resp. ' + d.crianca + ')' : '') : '—', data: d, createdAt: old?.createdAt || now, updatedAt: now};
+    if (idx >= 0) state.generatedDocs[idx] = rec; else state.generatedDocs.push(rec);
+    await writeDataFile(false); await sharedQueue;
+    if (localStorage.getItem('cei-shared-dirty') === '1') throw new Error('O servidor não confirmou a gravação. Tente novamente em instantes.');
+    cxCloseModal(); cxToast('Declaração salva.'); render();
+    if (popup) cxPrintDecl(rec, popup);
+  } catch (err) { popup?.close(); alert(err.message); }
+};
+function cxPrintDecl(g, popup) {
+  const d = g.data || {};
+  cxLetterhead({title: CX_DECL_MODELS[d.model]?.title || 'DECLARAÇÃO', bodyHtml: d.bodyHtml || cxDeclText(d), dateIso: d.emissao, showDate: true, signers: [{name: d.assinante, role: d.cargo}]}, popup);
+}
 
 /* ---------- Início do professor ---------- */
 function cxRenderTeacherHome(a) {
@@ -819,6 +927,7 @@ if (typeof renderDocumentosTab === 'function') {
   renderDocumentosTab = function () {
     cxPrevTab();
     const root = document.getElementById('docsTabContent');
+    if (root && CX_ADMIN && typeof documentosTab !== 'undefined' && documentosTab === 'declaracoes') return cxRenderDeclaracoes(root);
     if (root && CX_ADMIN && !root.querySelector('.cx-timb-link')) {
       const box = document.createElement('div'); box.className = 'panel cx-timb-link';
       box.innerHTML = '<div class="cx-head"><div><h2>Papel timbrado livre</h2><p>Comunicados, bilhetes, autorizações com canhoto, convites e qualquer outro texto no padrão do CEI.</p></div><button class="cx-btn primary" onclick="cxGo(\'timbrado\')">📄 Abrir papel timbrado</button></div>';
