@@ -12,6 +12,19 @@ const types = {
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
+// v47: carimba ?v=<hash do conteúdo> nos arquivos .js/.css citados pelas páginas,
+// para o navegador sempre baixar a versão nova depois de cada publicação.
+for (const page of ["index.html", "public.html", "access.html"]) {
+  const file = path.join(root, page);
+  if (!fs.existsSync(file)) continue;
+  const html = fs.readFileSync(file, "utf8").replace(/((?:src|href)=")(\/?)([\w.-]+\.(?:js|css))(?:\?v=[^"]*)?"/g, (all, attr, slash, name) => {
+    const target = path.join(root, name);
+    if (!fs.existsSync(target)) return all;
+    const hash = createHash("md5").update(fs.readFileSync(target)).digest("hex").slice(0, 10);
+    return `${attr}${slash}${name}?v=${hash}"`;
+  });
+  fs.writeFileSync(file, html);
+}
 const map = {};
 for (const dirname of [root, path.join(root, "public-app-files")].filter(d => fs.existsSync(d))) {
   for (const filename of fs.readdirSync(dirname)) {

@@ -2,6 +2,8 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
+const CX_VERSION = '47';
+window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
 const CX_ADMIN = CX_SESSION.role === 'admin';
@@ -151,7 +153,7 @@ function cxBuildNav() {
   const oldFooter = nav.nextElementSibling;
   if (oldFooter && !oldFooter.classList.contains('cx-nav-footer')) oldFooter.remove();
   const footer = document.createElement('div'); footer.className = 'cx-nav-footer';
-  footer.innerHTML = `<div class="cx-who">${cxEsc(CX_SESSION.email || '')}</div><span class="cx-role">${CX_ADMIN ? 'Administração' : 'Professor(a)'}</span><div class="cx-links"><button type="button" onclick="retryShared()">↻ Reconectar</button>${location.hostname.endsWith('.chatgpt.site') ? '' : '<a href="/trocar-senha?return_to=%2Frestrito">Trocar senha</a>'}<a href="/">Área pública</a><a href="/signout-with-chatgpt?return_to=%2F" target="_top">Sair</a></div>`;
+  footer.innerHTML = `<div class="cx-who">${cxEsc(CX_SESSION.email || '')}</div><span class="cx-role">${CX_ADMIN ? 'Administração' : 'Professor(a)'}</span><div class="cx-links"><button type="button" onclick="retryShared()">↻ Reconectar</button>${location.hostname.endsWith('.chatgpt.site') ? '' : '<a href="/trocar-senha?return_to=%2Frestrito">Trocar senha</a>'}<a href="/">Área pública</a><a href="/signout-with-chatgpt?return_to=%2F" target="_top">Sair</a></div><div style="margin-top:10px;font-size:11px;opacity:.7">Sistema CEI · versão ${CX_VERSION}</div>`;
   nav.after(footer);
   const brand = aside?.querySelector('.brand span');
   if (brand && CX_TEACHER) brand.innerHTML = 'Espaço do <b>Professor</b><small>CEI Lindolpho</small>';
