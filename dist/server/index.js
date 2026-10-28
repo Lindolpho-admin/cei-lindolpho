@@ -34,6 +34,21 @@ const FIN_ACCOUNTS = ["SICOOB", "PDDE_Basico", "PDDE_Qualidade", "Educacao_Conec
 const FIN_MOVES = ["entrada", "saida", "saldo_extrato", "saldo_inicial"];
 const FIN_NATURES = ["", "custeio", "capital"];
 const FIN_STATEMENTS = ["", "conta_corrente", "investimentos", "consolidado"];
+// v45: dados estruturados das atas redigidas (tipo, número, horário, participantes, pauta, assinaturas...).
+const MINUTE_TEXT = {tipo: 40, tipoOutro: 120, numero: 40, inicio: 5, fim: 5, local: 200, conduzida: 160, secretario: 160, participantes: 6000, pauta: 4000, encaminhamentos: 6000};
+function minuteMeta(input) {
+  if (!input || typeof input !== 'object') return null;
+  const out = {};
+  for (const [k, max] of Object.entries(MINUTE_TEXT)) out[k] = text(input[k], max);
+  if (!['pedagogica', 'familias', 'conselho', 'app', 'outra'].includes(out.tipo)) out.tipo = 'outra';
+  const validTime = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
+  if (out.inicio && !validTime(out.inicio)) out.inicio = '';
+  if (out.fim && !validTime(out.fim)) out.fim = '';
+  out.assinantes = (Array.isArray(input.assinantes) ? input.assinantes : []).slice(0, 50).map(p => ({ name: text(p?.name, 120), role: text(p?.role, 120) })).filter(p => p.name || p.role).slice(0, 12);
+  out.listaPresenca = input.listaPresenca === true;
+  out.abertura = input.abertura !== false;
+  return out;
+}
 function centralFields(get) {
   const area = text(get("area"), 40), kind = text(get("kind"), 40), date = text(get("date"), 10);
   const title = text(get("title"));
@@ -228,9 +243,9 @@ async function handleApi(request, env, url) {
       let fields;
       try { fields = centralFields(name => input[name]); } catch (error) { return fail(error.message, error.status || 400); }
       if (fields.kind !== "ata" && fields.kind !== "ata_compra") return fail("Somente atas podem ser redigidas no sistema.");
-      const body = text(input.body, 30000);
+      const body = text(input.body, 60000);
       if (!body) return fail("Informe o texto da ata.");
-      const record = { id: crypto.randomUUID(), ...fields, typed: true, body, presentes: text(input.presentes, 3000),
+      const record = { id: crypto.randomUUID(), ...fields, typed: true, body, presentes: text(input.presentes, 3000), meta: minuteMeta(input.meta),
         createdAt: stamp(), updatedAt: stamp(), createdBy: env.USER?.email || "" };
       await putRecord(env.BUCKET, record);
       return reply(publicRecord(record), 201);
@@ -301,9 +316,10 @@ async function handleApi(request, env, url) {
       try { fields = centralFields(name => input[name]); } catch (error) { return fail(error.message, error.status || 400); }
       if (!record.file && !fields.fin && !(record.typed || record.body)) return fail("Um registro sem arquivo precisa de lançamento financeiro.");
       if (record.typed || (record.kind === "ata" && record.body)) {
-        const body = text(input.body ?? record.body, 30000);
+        const body = text(input.body ?? record.body, 60000);
         if (!body) return fail("Informe o texto da ata.");
         record.body = body; record.typed = true; record.presentes = text(input.presentes ?? record.presentes, 3000);
+        if (input.meta !== undefined) record.meta = minuteMeta(input.meta);
         if (!["ata", "ata_compra"].includes(fields.kind)) return fail("Uma ata redigida deve continuar como ata.");
       }
       Object.assign(record, fields, { updatedAt: stamp(), updatedBy: env.USER?.email || "" });

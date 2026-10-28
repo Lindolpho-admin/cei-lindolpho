@@ -9,7 +9,7 @@ const CX_ADMIN = CX_SESSION.role === 'admin';
 /* ---------- Catálogos ---------- */
 const CX_AREAS = {
   institucional: {label: 'Documentos institucionais', hint: 'Regimento, PPP, calendário'},
-  reuniao_geral: {label: 'Reuniões gerais', hint: 'Equipe, assembleias'},
+  reuniao_geral: {label: 'Reuniões gerais e outras', hint: 'Equipe, assembleias, outras'},
   pedagogica: {label: 'Reuniões pedagógicas', hint: 'Planejamento, formação'},
   familias: {label: 'Reuniões com famílias', hint: 'Crianças e responsáveis'},
   conselho: {label: 'Conselho Escolar', hint: 'Atas, mandatos, editais'},
@@ -168,7 +168,7 @@ function cxBuildNav() {
   nav.addEventListener('click', e => { if (e.target.closest('button')) document.body.classList.remove('cx-nav-open'); });
   if (CX_TEACHER) {
     nav.innerHTML = '';
-    const items = [['dashboard', '⌂ Início'], ['timbrado', '📄 Papel timbrado'], ['documentos', '▣ Relatórios e registros'], ['biblioteca', '📚 Biblioteca']];
+    const items = [['dashboard', '⌂ Início'], ['timbrado', '📄 Papel timbrado'], ['documentos', '▣ Relatórios e registros'], ['biblioteca', '📚 Biblioteca'], ['enturmacao', '🎂 Ver enturmação']];
     for (const [view, label] of items) { const b = document.createElement('button'); b.dataset.view = view; b.textContent = label; b.onclick = () => { state.view = view; render(); }; nav.append(b); }
     return;
   }
@@ -189,11 +189,11 @@ function cxBuildNav() {
   const group = t => { const d = document.createElement('div'); d.className = 'cx-nav-group'; d.textContent = t; return d; };
   const frag = document.createDocumentFragment();
   frag.append(dash || make('dashboard', '⌂ Início'));
-  frag.append(group('Arquivo e documentos'), make('arquivo', '🗂 Arquivo central', {}), make('arquivo', '✎ Atas de reunião', {kind: 'ata'}), make('arquivo', '🛒 Compras e orçamentos', {area: 'compras'}));
+  frag.append(group('Arquivo e documentos'), make('arquivo', '🗂 Arquivo central', {}), make('atas', '✎ Atas de reunião'), make('arquivo', '🛒 Compras e orçamentos', {area: 'compras'}));
   if (doc) frag.append(doc); frag.append(make('timbrado', '📄 Papel timbrado'));
   frag.append(group('Financeiro'), make('financeiro', '💰 Saldos e lançamentos'));
   frag.append(group('Colegiados'), make('arquivo', '◇ Conselho Escolar', {area: 'conselho'}), make('arquivo', '◉ APP', {area: 'app'}));
-  frag.append(group('Secretaria'));
+  frag.append(group('Secretaria'), make('enturmacao', '🎂 Ver enturmação'));
   if (esp) frag.append(esp); if (bib) frag.append(bib); if (solic) frag.append(solic);
   frag.append(group('Sistema'), make('publica', '🌐 Página pública'));
   if (acessos) frag.append(acessos); if (seg) frag.append(seg);
@@ -226,6 +226,8 @@ window.cxGo = (view, preset) => {
 /* ---------- Render principal (intercepta as novas telas) ---------- */
 titles.arquivo = ['Arquivo central', 'Todos os documentos da administração em um só lugar'];
 titles.financeiro = ['Financeiro', 'Saldos por conta, custeio e capital, com conferência pelo extrato'];
+titles.enturmacao = ['Ver enturmação', 'Em qual turma a criança deve estudar, pela data de nascimento'];
+titles.atas = ['Atas de reunião', 'Pedagógicas, com famílias, Conselho Escolar, APP e outras'];
 titles.publica = ['Página pública', 'O que famílias e comunidade veem no site, sem login'];
 titles.timbrado = ['Papel timbrado', 'Comunicados, bilhetes, autorizações e documentos no padrão do CEI'];
 const cxBaseRender = render;
@@ -235,6 +237,8 @@ render = function () {
   const setHead = v => { document.getElementById('title').textContent = titles[v][0]; document.getElementById('subtitle').textContent = titles[v][1]; };
   if (state.view === 'timbrado') { setHead('timbrado'); cxMarkActive(); return cxRenderTimbrado(a); }
   if (CX_ADMIN && state.view === 'arquivo') { setHead('arquivo'); cxMarkActive(); return cxRenderArchive(a); }
+  if (state.view === 'enturmacao') { setHead('enturmacao'); cxMarkActive(); return cxRenderEnturmacao(a); }
+  if (CX_ADMIN && state.view === 'atas') { setHead('atas'); cxMarkActive(); return cxRenderAtas(a); }
   if (CX_ADMIN && state.view === 'publica') { setHead('publica'); cxMarkActive(); return cxRenderPublic(a); }
   if (CX_ADMIN && state.view === 'financeiro') { setHead('financeiro'); cxMarkActive(); return cxRenderFinance(a); }
   if (CX_TEACHER && state.view === 'dashboard') { cxBaseRender(); cxMarkActive(); return cxRenderTeacherHome(a); }
@@ -256,7 +260,7 @@ function cxRenderDashboard(a) {
   const hoje = cxToday();
   a.innerHTML = `<section class="cx-hero"><h2>Olá! O que você procura?</h2><p>Atas, orçamentos, notas, extratos, ofícios, encaminhamentos — tudo é pesquisado no Arquivo central.</p>
     <form class="cx-search" onsubmit="event.preventDefault();cxGo('arquivo',{});cx_setQuery(this.q.value)"><input name="q" type="search" placeholder="Ex.: ata conselho março, orçamento ventilador, nota fiscal Sicoob…" aria-label="Pesquisar no arquivo"></form>
-    <div class="cx-btns"><button class="cx-btn" onclick="cxOpenUpload()">⬆ Enviar documentos</button><button class="cx-btn" onclick="cxOpenMinute()">✎ Redigir ata</button><button class="cx-btn" onclick="cxOpenUpload({kind:'nota_fiscal',area:'financeiro'})">🧾 Lançar nota fiscal</button><button class="cx-btn" onclick="cxOpenTimbrado('comunicado')">📄 Novo comunicado</button><button class="cx-btn" onclick="cxGoDecl()">🕒 Declaração de comparecimento</button><button class="cx-btn" onclick="newOficio()">✉ Novo ofício</button></div></section>
+    <div class="cx-btns"><button class="cx-btn" onclick="cxOpenUpload()">⬆ Enviar documentos</button><button class="cx-btn" onclick="cxGo('atas')">✎ Redigir ata</button><button class="cx-btn" onclick="cxOpenUpload({kind:'nota_fiscal',area:'financeiro'})">🧾 Lançar nota fiscal</button><button class="cx-btn" onclick="cxOpenTimbrado('comunicado')">📄 Novo comunicado</button><button class="cx-btn" onclick="cxGoDecl()">🕒 Declaração de comparecimento</button><button class="cx-btn" onclick="newOficio()">✉ Novo ofício</button></div></section>
     <div class="cx-cols"><div class="panel" style="margin-top:0"><h2>Precisa de atenção</h2><ul class="cx-todo" id="cxTodo"><li class="muted">Carregando…</li></ul></div>
     <div class="panel" style="margin-top:0"><div class="cx-head"><h2>Saldos ${cxEsc(cx.finYear)}</h2><button class="cx-btn small" onclick="cxGo('financeiro')">Ver financeiro</button></div><div id="cxDashSaldos" class="muted">Carregando…</div></div></div>
     <div class="panel"><div class="cx-head"><h2>Enviados recentemente</h2><button class="cx-btn small" onclick="cxGo('arquivo',{})">Abrir arquivo</button></div><div id="cxRecent" class="muted">Carregando…</div></div>
@@ -292,7 +296,7 @@ window.cx_setQuery = q => { cx.filter.q = q || ''; const i = document.getElement
 function cxRenderArchive(a) {
   const f = cx.filter;
   a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-head"><div><h2>Arquivo da administração</h2><p>Envie, encontre e organize atas, orçamentos, notas, extratos e todos os documentos do CEI.</p></div>
-    <div class="cx-btns"><button class="cx-btn primary" onclick="cxOpenUpload()">⬆ Enviar documentos</button><button class="cx-btn" onclick="cxOpenMinute()">✎ Redigir ata</button></div></div>
+    <div class="cx-btns"><button class="cx-btn primary" onclick="cxOpenUpload()">⬆ Enviar documentos</button><button class="cx-btn" onclick="cxGo('atas')">✎ Redigir ata</button></div></div>
     <div class="cx-search"><input id="cxQ" type="search" value="${cxEsc(f.q)}" placeholder="Pesquise por título, assunto, processo, fornecedor, mês, valor…" oninput="cxState.filter.q=this.value;cxFilter()" aria-label="Pesquisar no arquivo"></div>
     <div class="cx-folders" id="cxFolders"></div>
     <div class="cx-filters">
@@ -525,7 +529,7 @@ window.cxSubmitEdit = async (e, id) => {
 };
 window.cxDelete = async id => {
   const r = cx.records.find(x => x.id === id); if (!r) return;
-  if (!confirm(`Excluir “${r.title}” e seus anexos do arquivo?\n\nEsta ação não pode ser desfeita (o backup completo anterior continua guardando o documento).`)) return;
+  if (!await cxConfirmTyped(r.title, r.file || r.signedFile ? 'O arquivo anexado também será apagado.' : '')) return;
   try { await cxRequest('/api/app/documents/' + id, {method: 'DELETE'}); await cxLoad(true); cxToast('Documento excluído.'); render(); } catch (err) { alert(err.message); }
 };
 window.cxAttachSigned = id => {
@@ -569,53 +573,182 @@ const cxPlainToHtml = t => String(t || '').split(/\n\s*\n/).map(p => `<p>${cxEsc
 const cxBodyHtml = body => (/^\s*</.test(body || '') ? body : cxPlainToHtml(body));
 
 /* ---------- Impressão no papel timbrado (reaproveita a paginação A4 do relatório avaliativo) ---------- */
-function cxLetterhead({title, meta = [], bodyHtml, dateIso, showDate = true, signers = [], slip = '', recipient = ''}, popup) {
+function cxLetterhead({title, meta = [], bodyHtml, dateIso, showDate = true, signers = [], slip = '', recipient = '', extraHtml = ''}, popup) {
   const w = popup || window.open('', '_blank'); if (!w) return alert('Permita a abertura da janela de impressão para este site.');
   const rows = []; const s = signers.filter(p => p.name || p.role);
   for (let i = 0; i < s.length; i += 2) rows.push('<div class="report-signature-row">' + s.slice(i, i + 2).map(p => `<div class="report-signature"><div class="report-signature-line"></div><b>${cxEsc(p.name)}</b><div>${cxEsc(p.role)}</div></div>`).join('') + '</div>');
   const slipHtml = slip ? `<div class="report-signature-row cx-slip"><div class="report-signature" style="padding-top:0;width:100%;text-align:left"><div class="cx-cut">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div><p><b>${cxEsc(title)}</b></p><p>${cxEsc(slip)}</p><p>Assinatura do(a) responsável: _____________________________________ Data: ___/___/______</p></div></div>` : '';
   w.document.open();
-  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${cxEsc(title || 'Documento')}</title><link rel="stylesheet" href="${location.origin}/child-report-print.css?v=20261021-rich1"><style>.cx-slip{grid-template-columns:1fr!important;padding-top:8mm}.cx-slip p{text-align:left!important;margin:0 0 3mm}.cx-cut{color:#7a8797;letter-spacing:1px;margin-bottom:4mm;font-size:9pt;white-space:nowrap;overflow:hidden}.cx-recipient{margin:0 0 4mm!important;text-align:left!important}</style><script src="${location.origin}/child-report-pagination.js?v=20261021-flow1" defer><\/script></head><body><div class="report-controls"><button id="reportPrint" disabled onclick="window.print()">Imprimir / Salvar PDF</button><span id="reportPrintStatus">Preparando páginas…</span></div><div id="reportSource" hidden>${title ? `<h1 class="report-title">${cxEsc(title)}</h1>` : ''}${meta.length ? `<section class="report-identification">${meta.map(([l, v]) => `<p><b>${cxEsc(l)}:</b> ${cxEsc(v)}</p>`).join('')}</section>` : ''}${recipient ? `<p class="cx-recipient">${cxEsc(recipient)}</p>` : ''}<div id="reportBodySource">${cxSanitize(bodyHtml)}</div>${showDate ? `<p class="report-date">Araquari, ${cxEsc(cxLongDate(dateIso || cxToday()))}.</p>` : ''}${rows.join('')}${slipHtml}</div><div id="reportPages"></div></body></html>`);
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${cxEsc(title || 'Documento')}</title><link rel="stylesheet" href="${location.origin}/child-report-print.css?v=20261021-rich1"><style>.cx-slip{grid-template-columns:1fr!important;padding-top:8mm}.cx-slip p{text-align:left!important;margin:0 0 3mm}.cx-cut{color:#7a8797;letter-spacing:1px;margin-bottom:4mm;font-size:9pt;white-space:nowrap;overflow:hidden}.cx-recipient{margin:0 0 4mm!important;text-align:left!important}.cx-pres{grid-template-columns:1fr 1fr!important;gap:6mm!important;align-items:end;padding:0 0 2mm!important;font-size:10pt}.cx-pres small{display:block;color:#5b6b82;font-size:8.5pt}.cx-pres-line{border-bottom:1px solid #26374a;height:7mm}.cx-pres-title{font-size:12pt!important;margin-top:8mm!important}.report-content h3{color:#143e68}</style><script src="${location.origin}/child-report-pagination.js?v=20261021-flow1" defer><\/script></head><body><div class="report-controls"><button id="reportPrint" disabled onclick="window.print()">Imprimir / Salvar PDF</button><span id="reportPrintStatus">Preparando páginas…</span></div><div id="reportSource" hidden>${title ? `<h1 class="report-title">${cxEsc(title)}</h1>` : ''}${meta.length ? `<section class="report-identification">${meta.map(([l, v]) => `<p><b>${cxEsc(l)}:</b> ${cxEsc(v)}</p>`).join('')}</section>` : ''}${recipient ? `<p class="cx-recipient">${cxEsc(recipient)}</p>` : ''}<div id="reportBodySource">${cxSanitize(bodyHtml)}</div>${showDate ? `<p class="report-date">Araquari, ${cxEsc(cxLongDate(dateIso || cxToday()))}.</p>` : ''}${rows.join('')}${slipHtml}${extraHtml}</div><div id="reportPages"></div></body></html>`);
   w.document.close();
 }
 
-/* ---------- Atas redigidas no sistema ---------- */
+/* ---------- Atas de reunião (v45) ---------- */
+const CX_ATA_TIPOS = {
+  pedagogica: {ico: '📚', label: 'Pedagógica', full: 'Reunião Pedagógica', area: 'pedagogica', hint: 'Planejamento, formação, conselho de classe', sign: [['', 'Direção'], ['', 'Coordenação pedagógica']]},
+  familias: {ico: '👨‍👩‍👧', label: 'Familiar(es)', full: 'Reunião com Famílias', area: 'familias', hint: 'Pais e responsáveis, individual ou coletiva', sign: [['', 'Direção'], ['', 'Professor(a) da turma']]},
+  conselho: {ico: '🤝', label: 'Conselho Escolar', full: 'Reunião do Conselho Escolar', area: 'conselho', hint: 'Ordinária, extraordinária, eleição', sign: [['', 'Presidente do Conselho Escolar'], ['', 'Secretário(a) do Conselho']]},
+  app: {ico: '🍎', label: 'Associação de Pais e Professores (APP)', full: 'Reunião da Associação de Pais e Professores (APP)', area: 'app', hint: 'Assembleia, diretoria, aprovação de contas', sign: [['', 'Presidente da APP'], ['', 'Secretário(a) da APP']]},
+  outra: {ico: '📝', label: 'Outra', full: 'Reunião', area: 'reuniao_geral', hint: 'Equipe, reunião geral ou outro tipo', sign: [['', 'Direção'], ['', 'Secretário(a) da reunião']]},
+};
+const cxAtaTipoOf = r => r?.meta?.tipo || ({pedagogica: 'pedagogica', familias: 'familias', conselho: 'conselho', app: 'app'}[cxAreaOf(r)] || 'outra');
+const cxAtaFull = m => (m.tipo === 'outra' && m.tipoOutro ? m.tipoOutro : CX_ATA_TIPOS[m.tipo]?.full || 'Reunião');
+const cxAtaTitle = m => `Ata${m.numero ? ' nº ' + m.numero : ''} — ${cxAtaFull(m)}${m.date ? ' — ' + cxBR(m.date) : ''}`;
+const cxIsAta = r => r.kind === 'ata' || r.kind === 'ata_compra';
+const cxAtaState = {tipo: '', q: ''};
+
+function cxRenderAtas(a) {
+  a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-head"><div><h2>Redigir uma nova ata</h2><p>Escolha o tipo de reunião. A ata sai no papel timbrado do CEI, fica salva no Arquivo central e depois você pode anexar o PDF assinado.</p></div><button class="cx-btn" onclick="cxOpenUpload({kind:'ata',area:'reuniao_geral'})">⬆ Enviar ata já pronta (PDF/foto)</button></div>
+    <div class="cx-models">${Object.entries(CX_ATA_TIPOS).map(([k, v]) => `<button class="cx-model" onclick="cxOpenMinute(null,{tipo:'${k}'})"><span class="cx-ico">${v.ico}</span><b>${cxEsc(v.label)}</b><small>${cxEsc(v.hint)}</small></button>`).join('')}</div></div>
+    <div class="panel"><div class="cx-head"><h2>Atas registradas</h2><input id="cxAtaQ" type="search" placeholder="Pesquisar por título, participante, pauta…" value="${cxEsc(cxAtaState.q)}" oninput="cxAtaState.q=this.value;cxFilterAtas()" style="min-width:260px"></div>
+    <div class="cx-chips" id="cxAtaChips" style="margin:12px 0"></div><div id="cxAtaList"><p class="muted">Carregando…</p></div></div>`;
+  cxLoad().then(() => { if (state.view === 'atas') cxFilterAtas(); }).catch(e => { document.getElementById('cxAtaList').innerHTML = `<div class="cx-empty">${cxEsc(e.message)}</div>`; });
+}
+window.cxFilterAtas = () => {
+  const el = document.getElementById('cxAtaList'); if (!el) return;
+  const all = cx.records.filter(cxIsAta), words = cxNorm(cxAtaState.q).split(/\s+/).filter(Boolean);
+  const count = k => all.filter(r => cxAtaTipoOf(r) === k).length;
+  document.getElementById('cxAtaChips').innerHTML = `<button class="cx-chip ${cxAtaState.tipo ? '' : 'pub'}" onclick="cxAtaState.tipo='';cxFilterAtas()">Todas (${all.length})</button>` + Object.entries(CX_ATA_TIPOS).map(([k, v]) => `<button class="cx-chip ${cxAtaState.tipo === k ? 'pub' : ''}" onclick="cxAtaState.tipo='${k}';cxFilterAtas()">${v.ico} ${cxEsc(v.label.replace(' (APP)', ''))} (${count(k)})</button>`).join('');
+  const list = all.filter(r => (!cxAtaState.tipo || cxAtaTipoOf(r) === cxAtaState.tipo) && words.every(w => cxNorm([r.title, r.notes, r.tags, r.processo, r.presentes, r.meta?.participantes, r.meta?.pauta, r.meta?.conduzida, String(r.body || '').replace(/<[^>]+>/g, ' '), cxBR(r.date)].join(' ')).includes(w))).sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  el.innerHTML = list.length ? list.map(r => cxItemHTML({src: 'rec', id: r.id, r, title: r.title, date: r.date, area: cxAreaOf(r), kind: r.kind, notes: r.notes || '', processo: r.processo || ''})).join('') : `<div class="cx-empty">${all.length ? 'Nenhuma ata encontrada com esse filtro.' : 'Nenhuma ata registrada ainda. Escolha um tipo de reunião acima para começar.'}</div>`;
+};
+
+function cxSignerRows(list) { return list.map(p => cxSignerRow({name: p.name ?? p[0], role: p.role ?? p[1]})).join(''); }
 window.cxOpenMinute = (id, preset = {}) => {
   if (!CX_ADMIN) return;
   const r = id ? cx.records.find(x => x.id === id) : null;
-  const area = r ? cxAreaOf(r) : (preset.area || cx.filter.area || 'reuniao_geral');
-  const m = cxModal(`<h2>${r ? 'Editar ata' : 'Redigir ata'}</h2><p class="hint">A ata fica guardada no arquivo, pode ser impressa no papel timbrado e, depois de assinada (Gov.br ou à mão), você anexa o PDF assinado.</p>
-  <form class="cx-form" onsubmit="cxSubmitMinute(event,'${r?.id || ''}')">
-    <label>Tipo *<select name="kind">${cxOptions({ata: CX_KINDS.ata, ata_compra: CX_KINDS.ata_compra}, r?.kind === 'ata_compra' ? 'ata_compra' : 'ata')}</select></label>
-    <label>Reunião / pasta *<select name="area">${cxOptions(CX_AREAS, area)}</select></label>
+  const m = r?.meta ? {...r.meta} : {};
+  const tipo = r ? cxAtaTipoOf(r) : (preset.tipo || 'outra'), T = CX_ATA_TIPOS[tipo];
+  const signers = m.assinantes?.length ? m.assinantes : T.sign.map(([name, role]) => ({name, role}));
+  const participantes = m.participantes ?? (r?.presentes || '');
+  const content = r ? cxBodyHtml(r.body) : '<p></p>';
+  const auto = r ? (!!r.meta && m.abertura !== false) : true;
+  cxModal(`<h2>${r ? 'Editar ata' : 'Nova ata'} · ${T.ico} ${cxEsc(T.label)}</h2><p class="hint">Preencha o que for pertinente; campos vazios não aparecem na impressão. Você pode colar o conteúdo de outro documento (Word, e-mail) no campo do texto e ajustar.</p>
+  <form class="cx-form" id="cxAtaForm" onsubmit="cxSubmitMinute(event,'${r?.id || ''}')">
+    <label>Tipo de reunião *<select name="tipo" onchange="cxAtaTipoChanged(this.form)">${Object.entries(CX_ATA_TIPOS).map(([k, v]) => `<option value="${k}" ${k === tipo ? 'selected' : ''}>${cxEsc(v.label)}</option>`).join('')}</select></label>
+    <label data-tipo-outro ${tipo === 'outra' ? '' : 'hidden'}>Qual reunião?<input name="tipoOutro" maxlength="120" value="${cxEsc(m.tipoOutro || '')}" placeholder="Ex.: Reunião geral da equipe"></label>
+    <label>Número da ata<input name="numero" maxlength="40" value="${cxEsc(m.numero || '')}" placeholder="Ex.: 03/2026"></label>
     <label>Data da reunião *<input type="date" name="date" required value="${cxEsc(r?.date || cxToday())}"></label>
+    <div class="cx-btns" style="gap:8px"><label style="flex:1">Início<input type="time" name="inicio" value="${cxEsc(m.inicio || '')}"></label><label style="flex:1">Término<input type="time" name="fim" value="${cxEsc(m.fim || '')}"></label></div>
+    <label>Local<input name="local" maxlength="200" value="${cxEsc(m.local ?? 'CEI Lindolpho José da Silva')}"></label>
+    <label>Conduzida / presidida por<input name="conduzida" maxlength="160" value="${cxEsc(m.conduzida || '')}" placeholder="Nome e função"></label>
+    <label>Secretário(a) — quem lavra a ata<input name="secretario" maxlength="160" value="${cxEsc(m.secretario || '')}" placeholder="Nome"></label>
+    <label class="full">Participantes <small class="muted">(um por linha; opcional: “Nome — função”)</small><textarea name="participantes" rows="4" maxlength="6000" placeholder="Maria Souza — Diretora&#10;João Lima — Pai do Pedro (Maternal II)">${cxEsc(participantes)}</textarea></label>
+    <label class="full">Pauta <small class="muted">(um item por linha)</small><textarea name="pauta" rows="3" maxlength="4000" placeholder="Aprovação da ata anterior&#10;Planejamento do 2º semestre">${cxEsc(m.pauta || '')}</textarea></label>
+    <div class="full"><label style="margin-bottom:6px!important">Conteúdo da reunião * <small class="muted">(cole aqui e edite)</small></label>${cxEditorHTML('cxMinuteBody', content)}</div>
+    <label class="full">Deliberações e encaminhamentos <small class="muted">(um por linha)</small><textarea name="encaminhamentos" rows="3" maxlength="6000">${cxEsc(m.encaminhamentos || '')}</textarea></label>
+    <label class="cx-check"><input type="checkbox" name="abertura" ${auto ? 'checked' : ''}> Incluir abertura e encerramento automáticos (“Aos … reuniram-se …” / “Nada mais havendo a tratar…”)</label>
+    <label class="cx-check"><input type="checkbox" name="listaPresenca" ${m.listaPresenca ? 'checked' : ''}> Incluir lista de presença com espaço para assinatura de cada participante</label>
+    <div class="cx-signers" id="cxSigners"><b style="font-size:13px">Quem assina a ata</b>${cxSignerRows(signers)}<div><button type="button" class="cx-btn small" onclick="document.getElementById('cxSigners').insertAdjacentHTML('beforeend',cxSignerRowHTML())">+ Adicionar assinatura</button></div></div>
+    <label class="full">Título no arquivo<input name="title" maxlength="200" value="${cxEsc(r?.title || '')}" placeholder="Gerado automaticamente: Ata nº … — Reunião … — data" data-auto="${r ? '' : '1'}"></label>
     <label>Processo / assunto<input name="processo" list="cxProcList" maxlength="160" value="${cxEsc(r?.processo || preset.processo || '')}" placeholder="Ex.: Compra de ventiladores 2026"></label>
-    <label class="full">Título *<input name="title" required maxlength="200" value="${cxEsc(r?.title || '')}" placeholder="Ex.: Ata nº 03/2026 — Reunião ordinária do Conselho Escolar"></label>
-    <label class="full">Presentes<textarea name="presentes" rows="2" maxlength="3000" placeholder="Nomes e funções de quem participou">${cxEsc(r?.presentes || '')}</textarea></label>
-    <div class="full"><label style="margin-bottom:6px!important">Texto da ata *</label>${cxEditorHTML('cxMinuteBody', r ? cxBodyHtml(r.body) : '<p>Aos ___ dias do mês de ________ de ______, às ___h, reuniram-se ...</p><h2>Pauta</h2><ol><li></li></ol><h2>Deliberações</h2><p></p><h2>Encaminhamentos</h2><p></p><p>Nada mais havendo a tratar, eu, ____________, lavrei a presente ata, que vai assinada por mim e pelos presentes.</p>')}</div>
-    <label class="full">Observações internas (não saem na impressão)<input name="notes" maxlength="3000" value="${cxEsc(r?.notes || '')}"></label>
-    <label class="full">Palavras-chave<input name="tags" maxlength="300" value="${cxEsc(r?.tags || '')}"></label>${cxProcList()}
-    <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button type="submit" name="go" value="save">Salvar</button><button class="primary" type="submit" name="go" value="print">Salvar e imprimir</button></div>
+    <label>Palavras-chave<input name="tags" maxlength="300" value="${cxEsc(r?.tags || '')}"></label>
+    <label class="cx-check"><input type="checkbox" name="compra" ${r?.kind === 'ata_compra' ? 'checked' : ''}> É uma ata de aprovação de compra (aparece no processo de compra)</label>
+    <label class="full">Observações internas (não saem na impressão)<input name="notes" maxlength="3000" value="${cxEsc(r?.notes || '')}"></label>${cxProcList()}
+    <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button type="submit" value="save">Salvar</button><button class="primary" type="submit" value="print">Salvar e imprimir</button></div>
   </form>`);
-  m.querySelector('form').addEventListener('submit', ev => { ev.target.dataset.go = ev.submitter?.value || 'save'; }, true);
+  const form = document.getElementById('cxAtaForm');
+  form.addEventListener('submit', ev => { form.dataset.go = ev.submitter?.value || 'save'; }, true);
+  form.title.addEventListener('input', () => { form.title.dataset.auto = form.title.value ? '' : '1'; });
+  cxEnablePaste('cxMinuteBody');
 };
+window.cxAtaTipoChanged = form => {
+  form.querySelector('[data-tipo-outro]').hidden = form.tipo.value !== 'outra';
+  const box = document.getElementById('cxSigners'), rows = [...box.querySelectorAll('.cx-signer')];
+  const untouched = rows.every(row => !row.querySelector('[data-sname]').value.trim());
+  if (untouched) { rows.forEach(r => r.remove()); box.querySelector('div:last-child').insertAdjacentHTML('beforebegin', cxSignerRows(CX_ATA_TIPOS[form.tipo.value].sign)); }
+};
+// Colar de Word/e-mail: mantém parágrafos, listas, negrito; remove estilos e imagens.
+function cxEnablePaste(id) {
+  const ed = document.getElementById(id); if (!ed) return;
+  ed.addEventListener('paste', e => {
+    const html = e.clipboardData?.getData('text/html'), text = e.clipboardData?.getData('text/plain');
+    if (!html && !text) return;
+    e.preventDefault();
+    document.execCommand('insertHTML', false, html ? cxSanitize(html) : cxPlainToHtml(text));
+  });
+}
+function cxReadMinute(form) {
+  const f = n => form[n]?.value?.trim?.() ?? '';
+  return {tipo: f('tipo'), tipoOutro: f('tipoOutro'), numero: f('numero'), inicio: f('inicio'), fim: f('fim'), local: f('local'), conduzida: f('conduzida'), secretario: f('secretario'),
+    participantes: form.participantes.value.trim(), pauta: form.pauta.value.trim(), encaminhamentos: form.encaminhamentos.value.trim(), listaPresenca: form.listaPresenca.checked, abertura: form.abertura.checked,
+    assinantes: [...form.querySelectorAll('.cx-signer')].map(row => ({name: row.querySelector('[data-sname]').value.trim(), role: row.querySelector('[data-srole]').value.trim()})).filter(p => p.name || p.role)};
+}
 window.cxSubmitMinute = async (e, id) => {
   e.preventDefault(); const form = e.target, print = form.dataset.go === 'print';
-  const bodyHtml = cxSanitize(document.getElementById('cxMinuteBody').innerHTML);
-  if (!document.getElementById('cxMinuteBody').textContent.trim()) return alert('Escreva o texto da ata.');
+  const ed = document.getElementById('cxMinuteBody');
+  if (!ed.textContent.trim()) return alert('Escreva ou cole o conteúdo da reunião.');
+  const meta = cxReadMinute(form), date = form.date.value;
+  if (meta.tipo === 'outra' && !meta.tipoOutro) meta.tipoOutro = '';
+  const title = form.title.value.trim() || cxAtaTitle({...meta, date});
   const popup = print ? window.open('', '_blank') : null; if (popup) popup.document.write('<p>Salvando ata…</p>');
-  const body = {central: true, kind: form.kind.value, area: form.area.value, date: form.date.value, title: form.title.value.trim(), processo: form.processo.value, notes: form.notes.value, tags: form.tags.value, presentes: form.presentes.value, body: bodyHtml};
+  const body = {central: true, kind: form.compra.checked ? 'ata_compra' : 'ata', area: form.compra.checked ? 'compras' : CX_ATA_TIPOS[meta.tipo].area, date, title, processo: form.processo.value, notes: form.notes.value, tags: form.tags.value,
+    presentes: meta.participantes.slice(0, 3000), body: cxSanitize(ed.innerHTML), meta};
   try {
     const saved = await cxRequest(id ? '/api/app/documents/' + id : '/api/app/documents', {method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
     cxCloseModal(); await cxLoad(true); cxToast('Ata salva no arquivo.'); render();
     if (popup) cxPrintMinute(saved.id, popup);
   } catch (err) { popup?.close(); alert(err.message); }
 };
+const cxTime = t => (t ? t.replace(':', 'h') : '');
 window.cxPrintMinute = (id, popup) => {
   const r = cx.records.find(x => x.id === id); if (!r) return;
-  const meta = [['Reunião', CX_AREAS[cxAreaOf(r)]?.label || ''], ['Data', cxBR(r.date)]]; if (r.presentes) meta.push(['Presentes', r.presentes]);
-  cxLetterhead({title: r.title, meta, bodyHtml: cxBodyHtml(r.body), dateIso: r.date, showDate: false, signers: [{name: '', role: 'Secretário(a) da reunião'}, {name: '', role: 'Presidente / Direção'}]}, popup);
+  const m = r.meta || {tipo: cxAtaTipoOf(r), participantes: r.presentes || ''};
+  const auto = !!r.meta && m.abertura !== false;
+  const lines = t => String(t || '').split(/\n+/).map(x => x.trim()).filter(Boolean);
+  const people = lines(m.participantes), pauta = lines(m.pauta), enc = lines(m.encaminhamentos);
+  const full = cxAtaFull(m);
+  const info = [['Data', cxLongDate(r.date)], ['Horário', m.inicio ? cxTime(m.inicio) + (m.fim ? ' às ' + cxTime(m.fim) : '') : ''], ['Local', m.local], ['Condução', m.conduzida], ['Secretário(a)', m.secretario]].filter(([, v]) => v);
+  let html = '';
+  if (auto) html += `<p style="text-align:justify">Aos ${cxEsc(cxLongDate(r.date))}${m.inicio ? ', às ' + cxEsc(cxTime(m.inicio)) : ''}${m.local ? (/^(cei|centro)/i.test(m.local) ? ', nas dependências do ' : ', em ') + cxEsc(m.local) : ''}, reuniram-se ${people.length ? 'as pessoas abaixo relacionadas' : 'os presentes'} para a ${cxEsc(full)}${m.conduzida ? ', sob a condução de ' + cxEsc(m.conduzida) : ''}.</p>`;
+  if (people.length) html += `<h3>Participantes (${people.length})</h3><ul>${people.map(p => `<li>${cxEsc(p)}</li>`).join('')}</ul>`;
+  if (pauta.length) html += `<h3>Pauta</h3><ol>${pauta.map(p => `<li>${cxEsc(p)}</li>`).join('')}</ol>`;
+  html += `<h3>Desenvolvimento</h3>${cxBodyHtml(r.body)}`;
+  if (enc.length) html += `<h3>Deliberações e encaminhamentos</h3><ol>${enc.map(p => `<li>${cxEsc(p)}</li>`).join('')}</ol>`;
+  if (auto) html += `<p style="text-align:justify">Nada mais havendo a tratar, ${m.fim ? 'a reunião foi encerrada às ' + cxEsc(cxTime(m.fim)) + ', e ' : ''}eu${m.secretario ? ', ' + cxEsc(m.secretario) + ',' : ''} lavrei a presente ata, que, lida e aprovada, vai assinada por mim e pelos demais presentes.</p>`;
+  const presence = m.listaPresenca && people.length ? `<h2 class="cx-pres-title">Lista de presença — ${cxEsc(full)} — ${cxEsc(cxBR(r.date))}</h2>` + people.map((p, i) => { const [n, role] = p.split(/\s+[—–-]\s+/); return `<div class="report-signature-row cx-pres"><span>${i + 1}. ${cxEsc(n)}${role ? `<small>${cxEsc(role)}</small>` : ''}</span><span class="cx-pres-line"></span></div>`; }).join('') : '';
+  const title = `ATA${m.numero ? ' Nº ' + m.numero : ''} — ${full.toUpperCase()}`;
+  cxLetterhead({title, meta: info, bodyHtml: html, dateIso: r.date, showDate: false, signers: (m.assinantes?.length ? m.assinantes : CX_ATA_TIPOS[m.tipo || 'outra'].sign.map(([name, role]) => ({name, role}))), extraHtml: presence}, popup);
 };
+
+/* ---------- Exclusão protegida: digitar o nome do documento ---------- */
+// Tolerante a acentos, travessões (— – -), “nº/n°/no” e espaços: o objetivo é exigir atenção, não digitação perfeita.
+const cxTypedNorm = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[º°ª]/g, 'o').replace(/[‐-―−]/g, '-').replace(/\s*-\s*/g, ' - ').replace(/["“”'‘’]/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('pt-BR');
+window.cxConfirmTyped = (name, detail = '') => new Promise(resolve => {
+  let box = document.getElementById('cxConfirm');
+  if (!box) { box = document.createElement('div'); box.id = 'cxConfirm'; box.className = 'modal cx-modal hidden'; document.body.append(box); }
+  const done = ok => { box.classList.add('hidden'); box.innerHTML = ''; resolve(ok); };
+  box.innerHTML = `<div class="modal-card" role="alertdialog" aria-modal="true" style="max-width:560px"><h2 style="color:#b3261e">Excluir documento?</h2>
+    <p>Esta ação <b>não pode ser desfeita</b>.${detail ? ' ' + cxEsc(detail) : ''} O último backup completo baixado continua guardando o documento.</p>
+    <p>Para confirmar, digite o nome do documento <b>por extenso</b>:</p>
+    <p class="cx-confirm-name" style="background:#fdecea;border-radius:10px;padding:10px 12px;font-weight:700;user-select:none;-webkit-user-select:none">${cxEsc(name)}</p>
+    <input id="cxConfirmInput" autocomplete="off" spellcheck="false" style="width:100%" placeholder="Digite o nome aqui">
+    <p class="hint" id="cxConfirmHint">Copiar e colar está desativado nesta caixa, para evitar exclusões por engano. Acentos, travessão (pode usar hífen -) e “nº” (pode usar “no”) não precisam ser exatos.</p>
+    <div class="actions"><button type="button" id="cxConfirmNo">Cancelar</button><button type="button" class="primary" id="cxConfirmYes" disabled>Excluir definitivamente</button></div></div>`;
+  box.classList.remove('hidden');
+  const input = box.querySelector('#cxConfirmInput'), yes = box.querySelector('#cxConfirmYes');
+  ['paste', 'drop'].forEach(ev => input.addEventListener(ev, e => e.preventDefault()));
+  input.addEventListener('input', () => { yes.disabled = cxTypedNorm(input.value) !== cxTypedNorm(name); });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !yes.disabled) done(true); if (e.key === 'Escape') done(false); });
+  yes.onclick = () => done(true); box.querySelector('#cxConfirmNo').onclick = () => done(false);
+  setTimeout(() => input.focus(), 30);
+});
+// Aplica a confirmação digitada às exclusões das telas antigas (ofícios, encaminhamentos, documentos gerados, acervo da APP).
+function cxGuardDelete(fnName, nameOf) {
+  const original = window[fnName]; if (typeof original !== 'function') return;
+  window[fnName] = async (...args) => {
+    const name = nameOf(...args); if (!name) return original(...args);
+    if (!await cxConfirmTyped(name)) return;
+    const realConfirm = window.confirm; window.confirm = () => true;
+    try { return await original(...args); } finally { window.confirm = realConfirm; }
+  };
+}
+cxGuardDelete('deleteGeneratedDoc', id => (state.generatedDocs || []).find(x => x.id === id)?.name || 'este documento');
+const cxOficioName = id => { const o = (state.oficios || []).find(x => x.id === id); return o ? `Ofício nº ${o.numero || ''}/${o.ano || ''}` : ''; };
+cxGuardDelete('deleteOficio', cxOficioName);
+cxGuardDelete('deleteOficioFromDocs', cxOficioName);
+cxGuardDelete('deleteMeimei', id => { const x = (state.encaminhamentosMeimei || []).find(r => r.id === id); return x ? `Encaminhamento de ${x.crianca}` : ''; });
+cxGuardDelete('deleteAppRecord', id => (typeof appArchiveRecords !== 'undefined' ? appArchiveRecords : []).find(r => r.id === id)?.title || '');
 
 /* ---------- Papel timbrado livre (professores e administração) ---------- */
 function cxTimbradoDocs() { return (state.generatedDocs || []).filter(g => g.template === 'documentoTimbrado' && (!CX_TEACHER || g.ownerEmail === CX_SESSION.email || !g.ownerEmail)).sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt))); }
@@ -675,7 +808,7 @@ window.cxSaveTimbrado = async (e, id, model) => {
 function cxPrintTimbrado(g, popup) { const d = g.data || {}; cxLetterhead({title: d.title, bodyHtml: d.bodyHtml, dateIso: d.date, showDate: d.showDate, signers: d.signers || [], slip: d.slip, recipient: d.recipient}, popup); }
 window.cxDuplicateTimbrado = id => { const g = (state.generatedDocs || []).find(x => x.id === id); if (g) cxOpenTimbrado(g.data?.model, null, {data: {...structuredClone(g.data), date: cxToday()}}); };
 window.cxDeleteTimbrado = async id => {
-  const g = (state.generatedDocs || []).find(x => x.id === id); if (!g || !confirm(`Excluir “${g.name}”?`)) return;
+  const g = (state.generatedDocs || []).find(x => x.id === id); if (!g || !await cxConfirmTyped(g.name)) return;
   state.generatedDocs = state.generatedDocs.filter(x => x.id !== id); await writeDataFile(false); cxToast('Documento excluído.'); render();
 };
 // Visualizar / editar pelos fluxos já existentes
@@ -935,6 +1068,67 @@ if (typeof renderDocumentosTab === 'function') {
     }
   };
 }
+
+/* ---------- Ver enturmação (v46) ----------
+   Regra: data de corte 31 de março. Para o ano letivo Y, a idade considerada é a completada até 31/03/Y.
+   Maternal = 2 anos · Jardim = 3 · Pré I = 4 · Pré II = 5. As faixas avançam sozinhas a cada ano. */
+const CX_TURMAS = [
+  {idade: 2, nome: 'Maternal', cor: 'var(--red,#e0483b)'},
+  {idade: 3, nome: 'Jardim', cor: 'var(--sky,#3b8fd9)'},
+  {idade: 4, nome: 'Pré I', cor: 'var(--green,#3f9a4b)'},
+  {idade: 5, nome: 'Pré II', cor: 'var(--purple,#8a4fd6)'},
+];
+const CX_CORTE = {mes: 3, dia: 31};
+// Ano de referência: quem nasce de 01/04 a 31/12 conta como do ano seguinte.
+const cxRefYear = iso => { const [y, m] = iso.split('-').map(Number); return m > CX_CORTE.mes ? y + 1 : y; };
+function cxEnturmar(iso, ano) {
+  const idade = ano - cxRefYear(iso);
+  const turma = CX_TURMAS.find(t => t.idade === idade);
+  if (turma) return {tipo: 'cei', turma, idade};
+  if (idade < CX_TURMAS[0].idade) return {tipo: 'novo', idade, entra: cxRefYear(iso) + CX_TURMAS[0].idade};
+  return {tipo: 'fundamental', idade};
+}
+const cxFaixa = (idade, ano) => ({de: `${ano - idade - 1}-04-01`, ate: `${ano - idade}-03-31`});
+function cxIdadeHoje(iso) {
+  const [y, m, d] = iso.split('-').map(Number), [ty, tm, td] = cxToday().split('-').map(Number);
+  let anos = ty - y, meses = tm - m; if (td < d) meses--; if (meses < 0) { anos--; meses += 12; }
+  return anos < 0 ? '' : `${anos} ano(s) e ${meses} mês(es)`;
+}
+const cxEnt = {nasc: '', ano: Number(cxToday().slice(0, 4))};
+window.cxEntState = cxEnt;
+function cxRenderEnturmacao(a) {
+  const hoje = Number(cxToday().slice(0, 4));
+  a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-head"><div><h2>Em qual turma a criança estuda?</h2><p>Digite a data de nascimento. A turma é calculada pela idade completada até <b>31 de março</b> de cada ano letivo, e as faixas mudam sozinhas na virada do ano.</p></div></div>
+    <div class="cx-form" style="margin-top:14px">
+      <label>Data de nascimento<input id="cxEntNasc" type="date" value="${cxEsc(cxEnt.nasc)}" max="${cxToday()}" oninput="cxEntState.nasc=this.value;cxEntResult()" style="font-size:18px;padding:12px"></label>
+      <p class="hint full" style="margin:0">Dica: para matrículas feitas no fim do ano, confira o cartão de <b>${hoje + 1}</b>.</p>
+    </div><div id="cxEntResult"></div></div>
+    <div class="panel"><div class="cx-head"><h2>Tabela de enturmação</h2><div class="cx-btns" style="align-items:center"><button class="cx-btn small" onclick="cxEntState.ano--;cxEntTable()" aria-label="Ano anterior">‹</button><b id="cxEntAno" style="font-size:18px;min-width:60px;text-align:center"></b><button class="cx-btn small" onclick="cxEntState.ano++;cxEntTable()" aria-label="Próximo ano">›</button><button class="cx-btn small" onclick="cxEntState.ano=${hoje};cxEntTable()">Ano atual</button></div></div><div id="cxEntTable" style="margin-top:12px"></div></div>`;
+  cxEntResult(); cxEntTable();
+}
+window.cxEntResult = () => {
+  const el = document.getElementById('cxEntResult'); if (!el) return;
+  const iso = cxEnt.nasc;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || iso > cxToday() || Number(iso.slice(0, 4)) < 1990) { el.innerHTML = iso ? '<div class="cx-empty" style="margin-top:14px">Confira a data de nascimento.</div>' : ''; return; }
+  const hoje = Number(cxToday().slice(0, 4));
+  const card = ano => { const r = cxEnturmar(iso, ano);
+    const body = r.tipo === 'cei' ? `<div class="cx-big" style="color:${r.turma.cor}">${cxEsc(r.turma.nome)}</div><small class="muted">${r.idade} anos completos até 31/03/${ano} · faixa ${cxBR(cxFaixa(r.idade, ano).de)} a ${cxBR(cxFaixa(r.idade, ano).ate)}</small>`
+      : r.tipo === 'novo' ? `<div class="cx-big" style="color:#8a5a00">Ainda não</div><small class="muted">${r.idade < 0 ? 'Ainda não completou idade' : r.idade + ' ano(s) até 31/03/' + ano}; entra no <b>Maternal em ${r.entra}</b>.</small>`
+      : `<div class="cx-big" style="color:#5b6b82">Ensino Fundamental</div><small class="muted">${r.idade} anos até 31/03/${ano}: já passou da idade da educação infantil (1º ano).</small>`;
+    return `<div class="cx-account" style="cursor:default;border-top:6px solid ${r.tipo === 'cei' ? r.turma.cor : '#cfd8e5'}"><h3>Ano letivo ${ano}</h3>${body}</div>`; };
+  const traj = CX_TURMAS.map(t => { const ano = cxRefYear(iso) + t.idade; return `<li><span><b style="color:${t.cor};display:inline-block;min-width:80px">${cxEsc(t.nome)}</b> em ${ano}</span>${ano === hoje ? '<span class="cx-chip ok">este ano</span>' : ano === hoje + 1 ? '<span class="cx-chip warn">próximo ano</span>' : ano < hoje ? '<span class="muted" style="font-size:12px">já cursou</span>' : '<span></span>'}</li>`; }).join('');
+  el.innerHTML = `<div class="cx-accounts" style="margin-top:16px">${card(hoje)}${card(hoje + 1)}</div>
+    <div class="cx-summary-grid" style="margin-top:12px"><div>Idade hoje<b>${cxEsc(cxIdadeHoje(iso))}</b></div><div>Nascimento<b>${cxEsc(cxLongDate(iso))}</b></div></div>
+    <h3 style="margin:16px 0 6px">Trajetória no CEI</h3><ul class="cx-todo" style="max-width:420px">${traj}</ul>
+    <p class="hint">1º ano do Ensino Fundamental em ${cxRefYear(iso) + 6}.</p>`;
+};
+window.cxEntTable = () => {
+  const el = document.getElementById('cxEntTable'); if (!el) return;
+  const ano = cxEnt.ano; document.getElementById('cxEntAno').textContent = ano;
+  el.innerHTML = `<div class="cx-table-wrap"><table class="cx-table" style="max-width:640px"><thead><tr><th>Turma</th><th>Nascidos de</th><th>até</th><th>Idade até 31/03/${ano}</th></tr></thead><tbody>${CX_TURMAS.map(t => { const f = cxFaixa(t.idade, ano); return `<tr><td><b style="color:${t.cor}">${cxEsc(t.nome)}</b></td><td class="cx-num">${cxBR(f.de)}</td><td class="cx-num">${cxBR(f.ate)}</td><td>${t.idade} anos</td></tr>`; }).join('')}</tbody></table></div>
+    <p class="hint">Calculada automaticamente pela data de corte de 31 de março. Use as setas para ver outros anos.</p>`;
+};
+window.cxEnturmar = cxEnturmar;
 
 /* ---------- Inicialização ---------- */
 document.addEventListener('click', e => { document.querySelectorAll('details.cx-more[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.cx-more-menu')) d.open = false; }); });

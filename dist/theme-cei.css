@@ -89,3 +89,5 @@ main button.danger,main .danger:not(.cx-chip){color:#b3261e!important;border-col
 .docs-tabs button:not(.active){background:transparent!important;border:0!important;color:#4a5b75!important}
 .docs-tabs button{padding:10px 16px!important;font-size:14px!important}
 .docs-section-head h3,.empty-category h3,.panel h3{font-family:var(--heading);color:var(--blue-deep)}
+#cxConfirmYes{background:#b3261e!important;border-color:#b3261e!important}
+#cxConfirmYes:disabled{opacity:.35;cursor:not-allowed}
