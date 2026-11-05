@@ -17,6 +17,23 @@ function guessCategory(r){const t=String(r.title||'').normalize('NFD').replace(/
  if(r.kind==='comunicado')return 'comunicados';
  return 'outros'}
 function publicNotices(p,all=false){const today=todayBR();return (p.notices||[]).filter(n=>all||!n.until||n.until>=today).sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)||String(b.date).localeCompare(String(a.date)))}
+// v48: composição da APP e do Conselho Escolar (chapas/mandatos com membros e contatos).
+export const ORGAOS=['app','conselho'];
+const validISO=v=>/^\d{4}-\d{2}-\d{2}$/.test(v)&&new Date(v+'T12:00:00Z').toISOString().slice(0,10)===v;
+function colegiados(p){const c=p.colegiados||{};return {app:Array.isArray(c.app)?c.app:[],conselho:Array.isArray(c.conselho)?c.conselho:[]}}
+function cleanChapa(input,old,user){
+ const nome=clip(input.nome,120),inicio=clip(input.inicio,10),fim=clip(input.fim,10);
+ if(!nome)deny('Informe o nome da chapa ou da gestão (ex.: Gestão 2026–2027).',400);
+ if(!validISO(inicio))deny('Informe a data de início do mandato.',400);
+ if(!validISO(fim))deny('Informe a data de validade (fim do mandato).',400);
+ if(fim<inicio)deny('A data de validade precisa ser depois do início.',400);
+ if(!Array.isArray(input.membros))deny('Lista de membros inválida.',400);
+ const membros=input.membros.map(m=>({nome:clip(m?.nome,120),cargo:clip(m?.cargo,80),segmento:clip(m?.segmento,60),condicao:m?.condicao==='suplente'?'suplente':'titular',telefone:clip(m?.telefone,40),email:clip(m?.email,120).toLowerCase()})).filter(m=>m.nome);
+ if(!membros.length)deny('Cadastre pelo menos um membro.',400);
+ if(membros.length>60)deny('Máximo de 60 membros por composição.',400);
+ const bad=membros.find(m=>m.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m.email));if(bad)deny(`E-mail inválido para ${bad.nome}.`,400);
+ return {id:old?.id||crypto.randomUUID(),nome,inicio,fim,ata:clip(input.ata,160),observacoes:clip(input.observacoes,1500),membros,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
+}
 export async function identity(request,env,bucket){
  const id=request.headers.get('oai-authenticated-user-id'),email=(request.headers.get('oai-authenticated-user-email')||'').trim().toLowerCase();
  const obj=await bucket.get(KEY),data=obj?JSON.parse(await obj.text()):{};
@@ -51,6 +68,7 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   if(path==='/api/portal/members'){if(user.role!=='admin')deny();const c=p.credentials||{};return p.members.map(m=>({...m,hasPassword:!!c[m.email],mustChange:!!c[m.email]?.mustChange}));}
   if(path==='/api/portal/publications'){if(user.role!=='admin')deny();return {ids:p.publicIds,meta:p.publicMeta||{},records:(await listRecords(bucket)).filter(r=>!r.internal)};}
   if(path==='/api/portal/public-settings'){if(user.role!=='admin')deny();return {info:{...DEFAULT_INFO,...(p.info||{})},notices:publicNotices(p,true),meta:p.publicMeta||{},categories:PUBLIC_CATEGORIES};}
+  if(path==='/api/portal/colegiados'){if(user.role!=='admin')deny();return colegiados(p);}
   if(path==='/api/portal/requests')return p.requests.filter(r=>user.role==='admin'||r.email===user.email);
   deny('Não encontrado.',404);
  }
@@ -86,6 +104,14 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
    const old=p.notices.find(n=>n.id===input.id);
    const notice={id:old?.id||crypto.randomUUID(),title,body,until,pinned:input.pinned===true,date:old?.date||todayBR(),updatedAt:new Date().toISOString(),by:user.email};
    p.notices=p.notices.filter(n=>n.id!==notice.id);p.notices.push(notice);if(p.notices.length>200)deny('Limite de avisos atingido. Exclua avisos antigos.',400)}
+ }else if(path==='/api/portal/colegiados'){
+  if(user.role!=='admin')deny();
+  const orgao=input.orgao;if(!ORGAOS.includes(orgao))deny('Órgão inválido.',400);
+  const all=p.colegiados=colegiados(p);
+  if(input.delete===true){all[orgao]=all[orgao].filter(c=>c.id!==input.id)}
+  else{const old=all[orgao].find(c=>c.id===input.chapa?.id),chapa=cleanChapa(input.chapa||{},old,user);
+   all[orgao]=all[orgao].filter(c=>c.id!==chapa.id);all[orgao].push(chapa);
+   if(all[orgao].length>100)deny('Limite de 100 composições atingido. Exclua registros antigos.',400)}
  }else if(path==='/api/portal/requests'){
   const book=data.books.find(b=>b.id===input.bookId);if(!book)deny('Livro não encontrado.',404);
   if(p.requests.some(r=>r.email===user.email&&r.bookId===book.id&&r.status==='pending'))deny('Você já tem uma solicitação pendente para este livro.',409);

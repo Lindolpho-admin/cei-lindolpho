@@ -202,3 +202,8 @@ button.cx-chip:hover{background:#dfe8f7}
 #memberForm input,#memberForm select{width:100%;margin:0}
 #memberForm button{justify-self:start}
 [data-pw]{margin-left:6px;border:1px solid #d5dce6;background:#fff;border-radius:7px;padding:4px 9px;cursor:pointer}
+
+/* v48: cadastro de membros dos colegiados */
+.cx-membro{display:grid;grid-template-columns:2fr 1.4fr 1.4fr 1fr;gap:8px 10px;align-items:end;background:#f7f9fd;border:1px solid var(--line,#e3e8f1);border-radius:12px;padding:10px 12px;margin:8px 0}
+.cx-membro .cx-m-nome{grid-column:span 2}.cx-membro .cx-m-del{justify-self:end}
+@media(max-width:760px){.cx-membro{grid-template-columns:1fr 1fr}.cx-membro .cx-m-nome{grid-column:1/-1}}
