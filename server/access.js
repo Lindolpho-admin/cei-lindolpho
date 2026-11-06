@@ -4,7 +4,7 @@ const allowed=new Set(['relatorioAvaliativo','praticaAlimentar','documentoTimbra
 const deny=(message='Acesso não autorizado.',status=403)=>{throw Object.assign(Error(message),{status})};
 // v40: página pública com categorias, avisos e informações da unidade
 export const PUBLIC_CATEGORIES=['regimento','ppp','conselho','app','calendario','cardapio','comunicados','outros'];
-const DEFAULT_INFO={phone:'(47) 3452-2185',whatsapp:'554734522185',address:'Rua Florentina Pereira Jasper, nº 136 – Porto Grande, Araquari – SC',hours:'',email:'',about:'',vagas:''};
+const DEFAULT_INFO={phone:'(47) 3452-2185',whatsapp:'554734522185',address:'Rua Florentina Pereira Jasper, nº 136 – Porto Grande, Araquari – SC',mapa:'Rua Florentina Pereira Jasper, 93 - Porto Grande, Araquari - SC',hours:'',email:'',about:'',vagas:''};
 const clip=(v,n)=>String(v??'').trim().slice(0,n);
 const todayBR=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'});
 function guessCategory(r){const t=String(r.title||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -139,7 +139,7 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   p.credentials=p.credentials||{};p.credentials[email]=await makeCredential(input.password,env,true);
  }else if(path==='/api/portal/public-info'){
   if(user.role!=='admin')deny();
-  const info={phone:clip(input.phone,40),whatsapp:clip(input.whatsapp,20).replace(/\D/g,''),address:clip(input.address,240),hours:clip(input.hours,300),email:clip(input.email,120),about:clip(input.about,2500),vagas:clip(input.vagas,1500)};
+  const info={phone:clip(input.phone,40),whatsapp:clip(input.whatsapp,20).replace(/\D/g,''),address:clip(input.address,240),mapa:clip(input.mapa,240),hours:clip(input.hours,300),email:clip(input.email,120),about:clip(input.about,2500),vagas:clip(input.vagas,1500)};
   if(info.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(info.email))deny('Informe um e-mail válido.',400);
   p.info=info;
  }else if(path==='/api/portal/notices'){

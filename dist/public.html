@@ -145,7 +145,7 @@ function renderInfo(i) {
   if (i.email) rows.push(['E-mail', `<a href="mailto:${safe(i.email)}">${safe(i.email)}</a>`]);
   if (i.hours) rows.push(['Horário de funcionamento', safe(i.hours)]);
   if (i.address) rows.push(['Endereço', safe(i.address)]);
-  const btns = [i.whatsapp ? `<a class="wa" href="https://wa.me/${safe(i.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a>` : '', i.phone ? `<a href="tel:+55${safe(i.phone.replace(/\D/g, ''))}">Ligar</a>` : '', i.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(i.address)}" target="_blank" rel="noopener">Ver no mapa</a>` : ''].join('');
+  const btns = [i.whatsapp ? `<a class="wa" href="https://wa.me/${safe(i.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a>` : '', i.phone ? `<a href="tel:+55${safe(i.phone.replace(/\D/g, ''))}">Ligar</a>` : '', i.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(i.mapa || i.address)}" target="_blank" rel="noopener">Ver no mapa</a>` : ''].join('');
   document.getElementById('contactCard').innerHTML = `<h3>Fale com o CEI</h3><dl>${rows.map(([t, d]) => `<div><dt>${t}</dt><dd>${d}</dd></div>`).join('')}</dl>${btns ? `<div class="btns">${btns}</div>` : ''}`;
   const blocks = [];
   if (i.about) blocks.push(`<div class="card"><h3>Sobre o CEI</h3><p>${safe(i.about)}</p></div>`);

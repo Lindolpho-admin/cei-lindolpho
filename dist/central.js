@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '51';
+const CX_VERSION = '52';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -1348,12 +1348,13 @@ function cxDrawPublic(a) {
       <label>E-mail institucional<input name="email" type="email" maxlength="120" value="${cxEsc(info.email)}"></label>
       <label>Horário de funcionamento<input name="hours" maxlength="300" value="${cxEsc(info.hours)}" placeholder="Ex.: Segunda a sexta, das 7h às 19h"></label>
       <label class="full">Endereço<input name="address" maxlength="240" value="${cxEsc(info.address)}"></label>
+      <label class="full">Localização no mapa (botão “Ver no mapa”)<input name="mapa" maxlength="240" data-case="off" value="${cxEsc(info.mapa || '')}" placeholder="Igual ao endereço"><small class="hint">Use quando o Google Maps marca o lugar errado com o endereço oficial. Pode ser outro número, um nome de lugar ou coordenadas (ex.: -26.37, -48.72). Não aparece escrito na página.</small></label>
       <label class="full">Sobre o CEI<textarea name="about" rows="4" maxlength="2500" placeholder="Apresentação curta da unidade: turmas atendidas, proposta pedagógica, história…">${cxEsc(info.about)}</textarea></label>
       <label class="full">Vagas e matrículas<textarea name="vagas" rows="3" maxlength="1500" placeholder="Como as famílias solicitam vaga (por exemplo, pela Secretaria Municipal de Educação), documentos e prazos.">${cxEsc(info.vagas)}</textarea></label>
       <div class="actions full cx-static-actions"><button class="primary" type="submit">Salvar informações</button></div></form></div>`;
 }
 window.cxSaveInfo = async e => {
-  e.preventDefault(); const f = e.target; const body = {}; ['phone', 'whatsapp', 'email', 'hours', 'address', 'about', 'vagas'].forEach(k => { body[k] = f[k].value; });
+  e.preventDefault(); const f = e.target; const body = {}; ['phone', 'whatsapp', 'email', 'hours', 'address', 'mapa', 'about', 'vagas'].forEach(k => { body[k] = f[k].value; });
   try { await cxRequest('/api/portal/public-info', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)}); cxToast('Informações da página pública salvas.'); render(); } catch (err) { alert(err.message); }
 };
 window.cxOpenNotice = id => {
