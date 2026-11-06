@@ -385,7 +385,8 @@ export default {
       const bucket=await activeBucket(env.BUCKET),user=await identity(request,env,bucket);
       if (!url.pathname.startsWith('/api/')) {
         if (!['GET','HEAD'].includes(request.method))return fail('Operação não permitida.',405);
-        if(url.pathname==='/'||url.pathname==='/public.html')return serveAsset(new URL('/public.html',url));
+        // v55: a prévia do link no WhatsApp/Facebook precisa do endereço completo da foto da fachada.
+        if(url.pathname==='/'||url.pathname==='/public.html'){const r=await serveAsset(new URL('/public.html',url));if(!r.ok)return r;const h=new Headers(r.headers);h.delete('Content-Length');return new Response((await r.text()).replaceAll('__ORIGEM__',url.origin),{status:r.status,headers:h});}
         if(['/admin','/docentes','/restrito','/index.html'].includes(url.pathname)){
           if(!['admin','teacher'].includes(user.role))return serveAsset(new URL('/access.html',url));
           // Decode UTF-8 once before injecting the trusted session.
