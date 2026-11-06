@@ -3,55 +3,60 @@
 <title>CEI Lindolpho José da Silva | Araquari-SC</title>
 <meta name="description" content="Centro de Educação Infantil Lindolpho José da Silva, Araquari-SC: avisos, regimento, PPP, Conselho Escolar, APP, calendário, cardápio e contato.">
 <link rel="icon" type="image/png" href="logo-lindolpho.png">
-<link rel="stylesheet" href="public-home.css?v=99a3d0d55c">
+<link rel="stylesheet" href="public-home.css?v=f33382a512">
 </head>
 <body>
-<a class="skip" href="#documentos">Ir para os documentos</a>
+<a class="skip" href="#conteudo">Ir para o conteúdo</a>
 <div class="top"><div class="wrap">
   <a class="brand" href="/"><img src="logo-lindolpho.png" alt="Logo do CEI Lindolpho"><span><b>CEI Lindolpho José da Silva</b><small>Centro de Educação Infantil · Araquari-SC</small></span></a>
-  <nav class="menu" aria-label="Seções da página"><a href="#avisos" id="menuAvisos" hidden>Avisos</a><a href="#documentos">Documentos</a><a href="#sobre" id="menuSobre" hidden>Sobre</a><a href="#equipe" id="menuEquipe" hidden>Equipe</a><a href="#contas" id="menuContas" hidden>Prestação de contas</a><a href="#contato">Contato</a><a class="restrito" href="/restrito?entrada=2">Área restrita →</a></nav>
+  <nav class="menu" aria-label="Acesso"><a class="restrito" href="/restrito?entrada=2">Área restrita →</a></nav>
 </div></div>
 <div class="crayons" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+<nav class="tabs" aria-label="Seções da página"><div class="wrap" id="tabs" role="tablist"></div></nav>
 
 <main id="conteudo">
-  <section class="hero"><div class="wrap">
+  <section class="hero tab-pane" id="inicio" data-tab="inicio"><div class="wrap">
     <span class="eyebrow">Comunidade escolar</span>
     <h1>Informações e documentos do nosso CEI</h1>
-    <p class="lead">Avisos da direção, regimento, projeto político-pedagógico, Conselho Escolar, APP, calendário e cardápio, reunidos para as famílias e a comunidade.</p>
-    <label class="search"><span class="skip">Pesquisar documentos</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="Procure um documento: regimento, PPP, cardápio…" autocomplete="off" aria-label="Pesquisar documentos públicos"></label>
-    <div class="chips" id="chips" aria-label="Filtrar por seção"></div>
+    <p class="lead">Avisos da direção, documentos, equipe, Conselho Escolar, APP, prestação de contas e contatos — cada assunto na sua guia.</p>
+    <div class="atalhos" id="atalhos"></div>
+    <div id="inicioAvisos"></div>
   </div></section>
 
-  <section class="block" id="avisos" hidden><div class="wrap">
+  <section class="block tab-pane" data-tab="avisos" id="avisos" hidden><div class="wrap">
     <h2>Avisos</h2><p class="sub">Comunicados da direção para as famílias.</p>
     <div class="notices" id="notices"></div>
   </div></section>
 
-  <section class="block" id="documentos"><div class="wrap">
+  <section class="block tab-pane" data-tab="documentos" id="documentos" hidden><div class="wrap">
     <h2>Documentos do CEI</h2><p class="sub" id="docsSub">Clique em “Abrir” para ver, baixar ou imprimir.</p>
+    <label class="search"><span class="skip">Pesquisar documentos</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Procure um documento: regimento, PPP, cardápio…" autocomplete="off" aria-label="Pesquisar documentos públicos"></label>
+    <div class="chips" id="chips" aria-label="Filtrar por seção"></div>
     <div id="docs"><p class="status">Carregando documentos…</p></div>
   </div></section>
 
-  <section class="block" id="sobre" hidden><div class="wrap two" id="sobreGrid"></div></section>
+  <section class="block tab-pane" data-tab="sobre" id="sobre" hidden><div class="wrap"><h2>Sobre o CEI</h2><div class="two" id="sobreGrid"></div></div></section>
 
-  <section class="block" id="contas" hidden><div class="wrap">
+  <section class="block tab-pane" data-tab="contas" id="contas" hidden><div class="wrap">
     <h2>Prestação de contas</h2><p class="sub">Como os recursos da APP e dos programas federais são usados no CEI. Valores lançados pela direção a partir das notas fiscais e dos extratos bancários.</p>
     <div class="contas-anos" id="contasAnos" role="tablist" aria-label="Ano"></div>
     <div id="contasLista"></div>
   </div></section>
 
-  <section class="block" id="equipe" hidden><div class="wrap">
-    <h2>Nossa equipe</h2><p class="sub">Quem cuida das crianças e faz o CEI funcionar todos os dias.</p>
-    <div id="equipeGrupos"></div>
-    <div id="colegiadosPub"></div>
+  <section class="block tab-pane" data-tab="equipe" id="equipe" hidden><div class="wrap">
+    <h2>Equipe e colegiados</h2><p class="sub" id="equipeSub">Quem trabalha no CEI e quem participa da gestão democrática.</p>
+    <div class="subtabs" id="equipeTabs" role="tablist" aria-label="Equipe e colegiados"></div>
+    <div class="subpane" data-sub="cei" id="equipeGrupos"></div>
+    <div class="subpane" data-sub="conselho" id="pubConselho" hidden></div>
+    <div class="subpane" data-sub="app" id="pubApp" hidden></div>
   </div></section>
 
-  <section class="block" id="contato"><div class="wrap two">
+  <section class="block tab-pane" data-tab="contato" id="contato" hidden><div class="wrap"><h2>Contato</h2><div class="two">
     <div class="card contact" id="contactCard"><h3>Fale com o CEI</h3><dl id="contactList"><div><dt>Telefone</dt><dd><a href="tel:+554734522185">(47) 3452-2185</a></dd></div></dl></div>
     <div class="card"><h3>Atendimento às famílias</h3><p>Para informações sobre uma criança, documentos individuais, declarações ou atendimento, fale diretamente com a secretaria do CEI pelos contatos ao lado.</p><p>Os documentos desta página são públicos. Informações pessoais de crianças e famílias nunca são publicadas aqui.</p></div>
-  </div></section>
+  </div></div></section>
 </main>
 
 <footer class="site"><div class="wrap"><span id="footAddr">CEI Lindolpho José da Silva · Araquari-SC</span><a href="/restrito?entrada=2">Área restrita da equipe</a></div></footer>
@@ -85,18 +90,29 @@ function docItem(m, showCat) {
 const EQ_CATS = [['gestao', 'Gestão'], ['professores', 'Professores'], ['administrativo', 'Administrativo'], ['apoio', 'Apoio'], ['estagio', 'Estágio']];
 const iniciais = n => String(n || '').split(/\s+/).filter(w => w.length > 2).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const pessoa = (nome, funcao, foto, extra = '') => `<figure class="pessoa">${foto ? `<img src="/api/public/foto/${encodeURIComponent(foto)}" alt="Foto de ${safe(nome)}" loading="lazy" width="150" height="200">` : `<span class="sem-foto" aria-hidden="true">${safe(iniciais(nome))}</span>`}<figcaption><b>${safe(nome)}</b><span>${safe(funcao)}</span>${extra}</figcaption></figure>`;
+let equipeSub = '';
 function renderEquipe(d) {
   const equipe = d.equipe || [], col = d.colegiados || {};
   const grupos = EQ_CATS.map(([k, t]) => [t, equipe.filter(e => e.categoria === k)]).filter(([, l]) => l.length);
   document.getElementById('equipeGrupos').innerHTML = grupos.map(([t, l]) => `<h3 class="eq-grupo">${t}</h3><div class="pessoas">${l.map(e => pessoa(e.nome, e.funcao, e.foto, e.atuacao ? `<small>${safe(e.atuacao)}</small>` : '')).join('')}</div>`).join('');
   const br = iso => iso ? iso.split('-').reverse().join('/') : '';
-  const orgaos = [['conselho', 'Conselho Escolar'], ['app', 'APP — Associação de Pais e Professores']].filter(([k]) => col[k]);
-  document.getElementById('colegiadosPub').innerHTML = orgaos.map(([k, t]) => { const c = col[k], l = [...c.membros].sort((a, b) => (a.condicao === 'suplente') - (b.condicao === 'suplente'));
-    return `<h3 class="eq-grupo">${t}</h3><p class="sub" style="margin-top:-6px">${safe(c.nome)} · mandato de ${br(c.inicio)} a ${br(c.fim)}</p><div class="pessoas">${l.map(m => pessoa(m.nome, m.cargo || 'Membro', m.foto, [m.segmento, m.condicao === 'suplente' ? 'suplente' : ''].filter(Boolean).length ? `<small>${safe([m.segmento, m.condicao === 'suplente' ? 'suplente' : ''].filter(Boolean).join(' · '))}</small>` : '')).join('')}</div>`; }).join('');
-  const tem = grupos.length || orgaos.length;
-  document.getElementById('equipe').hidden = !tem; document.getElementById('menuEquipe').hidden = !tem;
-  if (!grupos.length && orgaos.length) document.querySelector('#equipe .sub').textContent = 'Colegiados que participam da gestão do CEI.';
+  const orgao = (k, t, el) => { const c = col[k]; if (!c) return false; const l = [...c.membros].sort((a, b) => (a.condicao === 'suplente') - (b.condicao === 'suplente'));
+    document.getElementById(el).innerHTML = `<h3 class="eq-grupo">${t}</h3><p class="sub" style="margin-top:-6px">${safe(c.nome)} · mandato de ${br(c.inicio)} a ${br(c.fim)}</p><div class="pessoas">${l.map(m => pessoa(m.nome, m.cargo || 'Membro', m.foto, [m.segmento, m.condicao === 'suplente' ? 'suplente' : ''].filter(Boolean).length ? `<small>${safe([m.segmento, m.condicao === 'suplente' ? 'suplente' : ''].filter(Boolean).join(' · '))}</small>` : '')).join('')}</div>`; return true; };
+  const subs = [grupos.length && ['cei', 'Equipe do CEI'], orgao('conselho', 'Conselho Escolar', 'pubConselho') && ['conselho', 'Conselho Escolar'], orgao('app', 'APP — Associação de Pais e Professores', 'pubApp') && ['app', 'APP']].filter(Boolean);
+  setDisp('equipe', subs.length > 0);
+  if (!subs.length) return;
+  if (!subs.some(([k]) => k === equipeSub)) equipeSub = subs[0][0];
+  const bar = document.getElementById('equipeTabs');
+  bar.hidden = subs.length < 2;
+  bar.innerHTML = subs.map(([k, t]) => `<button type="button" role="tab" data-sub="${k}">${t}</button>`).join('');
+  showSub(equipeSub);
 }
+function showSub(k) {
+  equipeSub = k;
+  document.querySelectorAll('#equipeTabs button').forEach(b => { const on = b.dataset.sub === k; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  document.querySelectorAll('#equipe .subpane').forEach(p => { p.hidden = p.dataset.sub !== k; });
+}
+document.getElementById('equipeTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { showSub(b.dataset.sub); history.replaceState(null, '', '#equipe-' + b.dataset.sub); } });
 const brl = c => (Number(c || 0) / 100).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
 const dbr = iso => iso ? iso.split('-').reverse().join('/') : '';
 let contasData = null, contasAno = '';
@@ -105,7 +121,7 @@ function renderContas(d) {
   const c = contasData; if (!c || !c.contas?.length) return;
   const anos = [...new Set(c.contas.flatMap(x => x.anos.map(a => a.ano)))].sort().reverse();
   if (!contasAno || !anos.includes(contasAno)) contasAno = anos[0];
-  document.getElementById('contas').hidden = false; document.getElementById('menuContas').hidden = false;
+  setDisp('contas', true);
   document.getElementById('contasAnos').innerHTML = anos.length > 1 ? anos.map(a => `<button type="button" role="tab" aria-selected="${a === contasAno}" class="${a === contasAno ? 'on' : ''}" data-ano="${a}">${a}</button>`).join('') : '';
   const MOV = {entrada: 'Entrada', saida: 'Despesa', saldo_inicial: 'Saldo inicial'};
   document.getElementById('contasLista').innerHTML = c.contas.map(conta => { const a = conta.anos.find(x => x.ano === contasAno); if (!a) return '';
@@ -136,7 +152,9 @@ q.addEventListener('input', render);
 
 function renderNotices(list) {
   const sec = document.getElementById('avisos');
-  sec.hidden = !list.length; document.getElementById('menuAvisos').hidden = !list.length;
+  setDisp('avisos', list.length > 0);
+  const top = list.slice(0, 2);
+  document.getElementById('inicioAvisos').innerHTML = top.length ? `<h2 class="inicio-h">Avisos recentes</h2><div class="notices">${top.map(n => `<article class="notice ${n.pinned ? 'pinned' : ''}">${n.pinned ? '<span class="tag">Importante</span>' : ''}<time datetime="${safe(n.date)}">${safe(longDate(n.date))}</time><h3>${safe(n.title)}</h3></article>`).join('')}</div>${list.length > 2 ? `<p><a class="ver-mais" href="#avisos">Ver todos os ${list.length} avisos →</a></p>` : ''}` : '';
   document.getElementById('notices').innerHTML = list.map(n => `<article class="notice ${n.pinned ? 'pinned' : ''}">${n.pinned ? '<span class="tag">Importante</span>' : ''}<time datetime="${safe(n.date)}">${safe(longDate(n.date))}</time><h3>${safe(n.title)}</h3>${n.body ? `<p>${safe(n.body)}</p>` : ''}</article>`).join('');
 }
 function renderInfo(i) {
@@ -150,14 +168,44 @@ function renderInfo(i) {
   const blocks = [];
   if (i.about) blocks.push(`<div class="card"><h3>Sobre o CEI</h3><p>${safe(i.about)}</p></div>`);
   if (i.vagas) blocks.push(`<div class="card"><h3>Vagas e matrículas</h3><p>${safe(i.vagas)}</p></div>`);
-  document.getElementById('sobre').hidden = !blocks.length; document.getElementById('menuSobre').hidden = !i.about;
+  setDisp('sobre', blocks.length > 0);
   document.getElementById('sobreGrid').innerHTML = blocks.join('');
   if (blocks.length === 1) document.getElementById('sobreGrid').style.gridTemplateColumns = '1fr';
   if (i.address) document.getElementById('footAddr').textContent = 'CEI Lindolpho José da Silva · ' + i.address;
 }
+/* ---------- Guias: cada uma mostra só o seu assunto ---------- */
+const TABS = [['inicio', 'Início', '🏠'], ['avisos', 'Avisos', '📣'], ['documentos', 'Documentos', '📄'], ['equipe', 'Equipe e colegiados', '👥'], ['contas', 'Prestação de contas', '💰'], ['sobre', 'Sobre', 'ℹ️'], ['contato', 'Contato', '📞']];
+const disp = {inicio: true, documentos: true, contato: true};
+let atual = '';
+function setDisp(id, on) { disp[id] = !!on; if (ready) { drawTabs(); if (!disp[atual]) show('inicio', false); } }
+let ready = false;
+function drawTabs() {
+  document.getElementById('tabs').innerHTML = TABS.filter(([id]) => disp[id]).map(([id, t, ic]) => `<a role="tab" href="#${id}" data-tab="${id}" aria-selected="${id === atual}" class="${id === atual ? 'on' : ''}"><span aria-hidden="true">${ic}</span>${t}</a>`).join('');
+  document.getElementById('atalhos').innerHTML = TABS.filter(([id]) => id !== 'inicio' && disp[id]).map(([id, t, ic]) => `<a class="atalho" href="#${id}"><span aria-hidden="true">${ic}</span><b>${t}</b><small>${resumo(id)}</small></a>`).join('');
+}
+function resumo(id) {
+  if (id === 'documentos') return materials.length ? `${materials.length} documento(s) público(s)` : 'Regimento, PPP, cardápio…';
+  if (id === 'avisos') return 'Comunicados da direção';
+  if (id === 'equipe') return 'Professores, apoio, Conselho e APP';
+  if (id === 'contas') return 'Recursos da APP e programas';
+  if (id === 'sobre') return 'O CEI, vagas e matrículas';
+  return 'Telefone, endereço e mapa';
+}
+function show(id, scroll = true) {
+  const [tab, sub] = String(id || '').split('-');
+  atual = disp[tab] ? tab : 'inicio';
+  document.querySelectorAll('.tab-pane').forEach(p => { p.hidden = p.dataset.tab !== atual; });
+  document.querySelectorAll('#tabs [data-tab]').forEach(a => { const on = a.dataset.tab === atual; a.classList.toggle('on', on); a.setAttribute('aria-selected', on); if (on && a.scrollIntoView) a.scrollIntoView({block: 'nearest', inline: 'center'}); });
+  if (atual === 'equipe' && sub && document.querySelector(`#equipeTabs [data-sub="${sub}"]`)) showSub(sub);
+  if (atual === 'documentos') setTimeout(() => q.focus({preventScroll: true}), 0);
+  if (scroll) window.scrollTo({top: 0});
+  document.title = (atual === 'inicio' ? '' : TABS.find(t => t[0] === atual)[1] + ' · ') + 'CEI Lindolpho José da Silva';
+}
+window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 fetch('/api/public/home', {cache: 'no-store'}).then(r => { if (!r.ok) throw Error(); return r.json(); }).then(d => {
   materials = d.materials || []; renderNotices(d.notices || []); renderInfo(d.info || {}); renderEquipe(d); renderContas(d.contas); render();
-}).catch(() => { document.getElementById('docs').innerHTML = '<div class="empty">Não foi possível carregar os documentos agora. Tente novamente em instantes.</div>'; });
+  ready = true; drawTabs(); show(location.hash.slice(1), false);
+}).catch(() => { document.getElementById('docs').innerHTML = '<div class="empty">Não foi possível carregar os documentos agora. Tente novamente em instantes.</div>'; ready = true; drawTabs(); show(location.hash.slice(1), false); });
 })();
 </script>
 </body></html>

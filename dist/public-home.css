@@ -148,3 +148,31 @@ footer.site a{font-weight:700}
 .conta td{padding:8px 6px;border-bottom:1px solid #eef1f6;vertical-align:top}.conta td small{color:var(--muted)}
 .conta .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 @media(max-width:700px){.conta-nums{grid-template-columns:1fr 1fr}.cats-bar li{grid-template-columns:1fr auto}.cats-bar i{grid-column:1/-1;grid-row:2}}
+
+/* v54: página pública em guias */
+.tabs{position:sticky;top:72px;z-index:15;background:rgba(255,253,248,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.tabs .wrap{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-top:8px;padding-bottom:0}
+.tabs .wrap::-webkit-scrollbar{display:none}
+.tabs a{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;text-decoration:none;color:var(--muted);font-weight:700;font-size:14.5px;padding:10px 14px 12px;border-bottom:3px solid transparent;border-radius:10px 10px 0 0;white-space:nowrap}
+.tabs a:hover{color:var(--ink);background:var(--soft)}
+.tabs a.on{color:var(--blue-deep);border-bottom-color:var(--blue);background:#fff}
+.tab-pane{min-height:55vh}
+.tab-pane.block{padding-top:34px}
+.atalhos{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin:8px 0 26px}
+.atalho{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;text-decoration:none;color:var(--ink);box-shadow:0 2px 10px rgba(29,59,130,.04);transition:border-color .15s,transform .15s}
+.atalho:hover{border-color:#b9c7e6;transform:translateY(-1px)}
+.atalho span{grid-row:span 2;font-size:26px}
+.atalho b{font-size:15.5px;color:var(--blue-deep)}.atalho small{color:var(--muted);font-size:13px}
+.inicio-h{font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;color:var(--blue-deep);font-size:21px;margin:6px 0 12px}
+.ver-mais{font-weight:700;color:var(--blue)}
+.subtabs{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 6px}
+.subtabs button{font:inherit;font-weight:700;font-size:14.5px;border:1.5px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:8px 16px;cursor:pointer}
+.subtabs button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+#documentos .search{margin:4px 0 12px}
+@media(max-width:560px){.tabs{top:62px}.tabs a{padding:9px 11px 11px;font-size:14px}.atalhos{grid-template-columns:1fr 1fr}.atalho{grid-template-columns:1fr;text-align:left}.atalho span{grid-row:auto;font-size:22px}}
+@media(max-width:560px){
+  .subtabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.subtabs::-webkit-scrollbar{display:none}.subtabs button{flex:0 0 auto;padding:7px 13px;font-size:14px}
+  .pessoas{grid-template-columns:repeat(3,1fr);gap:8px}
+  .pessoa{padding:6px 6px 8px;border-radius:12px}.pessoa .sem-foto{font-size:22px}
+  .pessoa b{font-size:12.5px}.pessoa span{font-size:11.5px}.pessoa small{font-size:11px}
+}

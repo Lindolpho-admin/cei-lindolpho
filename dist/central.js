@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '53';
+const CX_VERSION = '54';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
