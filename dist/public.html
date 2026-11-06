@@ -3,13 +3,13 @@
 <title>CEI Lindolpho José da Silva | Araquari-SC</title>
 <meta name="description" content="Centro de Educação Infantil Lindolpho José da Silva, Araquari-SC: avisos, regimento, PPP, Conselho Escolar, APP, calendário, cardápio e contato.">
 <link rel="icon" type="image/png" href="logo-lindolpho.png">
-<link rel="stylesheet" href="public-home.css?v=4d3224dea0">
+<link rel="stylesheet" href="public-home.css?v=99a3d0d55c">
 </head>
 <body>
 <a class="skip" href="#documentos">Ir para os documentos</a>
 <div class="top"><div class="wrap">
   <a class="brand" href="/"><img src="logo-lindolpho.png" alt="Logo do CEI Lindolpho"><span><b>CEI Lindolpho José da Silva</b><small>Centro de Educação Infantil · Araquari-SC</small></span></a>
-  <nav class="menu" aria-label="Seções da página"><a href="#avisos" id="menuAvisos" hidden>Avisos</a><a href="#documentos">Documentos</a><a href="#sobre" id="menuSobre" hidden>Sobre</a><a href="#contato">Contato</a><a class="restrito" href="/restrito?entrada=2">Área restrita →</a></nav>
+  <nav class="menu" aria-label="Seções da página"><a href="#avisos" id="menuAvisos" hidden>Avisos</a><a href="#documentos">Documentos</a><a href="#sobre" id="menuSobre" hidden>Sobre</a><a href="#equipe" id="menuEquipe" hidden>Equipe</a><a href="#contas" id="menuContas" hidden>Prestação de contas</a><a href="#contato">Contato</a><a class="restrito" href="/restrito?entrada=2">Área restrita →</a></nav>
 </div></div>
 <div class="crayons" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
 
@@ -35,6 +35,18 @@
   </div></section>
 
   <section class="block" id="sobre" hidden><div class="wrap two" id="sobreGrid"></div></section>
+
+  <section class="block" id="contas" hidden><div class="wrap">
+    <h2>Prestação de contas</h2><p class="sub">Como os recursos da APP e dos programas federais são usados no CEI. Valores lançados pela direção a partir das notas fiscais e dos extratos bancários.</p>
+    <div class="contas-anos" id="contasAnos" role="tablist" aria-label="Ano"></div>
+    <div id="contasLista"></div>
+  </div></section>
+
+  <section class="block" id="equipe" hidden><div class="wrap">
+    <h2>Nossa equipe</h2><p class="sub">Quem cuida das crianças e faz o CEI funcionar todos os dias.</p>
+    <div id="equipeGrupos"></div>
+    <div id="colegiadosPub"></div>
+  </div></section>
 
   <section class="block" id="contato"><div class="wrap two">
     <div class="card contact" id="contactCard"><h3>Fale com o CEI</h3><dl id="contactList"><div><dt>Telefone</dt><dd><a href="tel:+554734522185">(47) 3452-2185</a></dd></div></dl></div>
@@ -70,6 +82,43 @@ function docItem(m, showCat) {
   const c = CATS[m.category] || CATS.outros, url = `/api/public/file/${encodeURIComponent(m.id)}`;
   return `<li class="doc" style="--c:${c.c}"><div>${showCat ? `<span class="cat-name">${c.ico} ${safe(c.label)}</span>` : ''}<b>${safe(m.title)}</b>${m.description ? `<span class="desc">${safe(m.description)}</span>` : ''}<small>${[br(m.date), type(m.mime), m.size ? size(m.size) : ''].filter(Boolean).join(' · ')}</small></div>${viewable(m.mime) ? `<a class="open" href="${url}?view=1" target="_blank" rel="noopener">Abrir</a>` : `<a class="open dl" href="${url}">Baixar</a>`}</li>`;
 }
+const EQ_CATS = [['gestao', 'Gestão'], ['professores', 'Professores'], ['administrativo', 'Administrativo'], ['apoio', 'Apoio'], ['estagio', 'Estágio']];
+const iniciais = n => String(n || '').split(/\s+/).filter(w => w.length > 2).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const pessoa = (nome, funcao, foto, extra = '') => `<figure class="pessoa">${foto ? `<img src="/api/public/foto/${encodeURIComponent(foto)}" alt="Foto de ${safe(nome)}" loading="lazy" width="150" height="200">` : `<span class="sem-foto" aria-hidden="true">${safe(iniciais(nome))}</span>`}<figcaption><b>${safe(nome)}</b><span>${safe(funcao)}</span>${extra}</figcaption></figure>`;
+function renderEquipe(d) {
+  const equipe = d.equipe || [], col = d.colegiados || {};
+  const grupos = EQ_CATS.map(([k, t]) => [t, equipe.filter(e => e.categoria === k)]).filter(([, l]) => l.length);
+  document.getElementById('equipeGrupos').innerHTML = grupos.map(([t, l]) => `<h3 class="eq-grupo">${t}</h3><div class="pessoas">${l.map(e => pessoa(e.nome, e.funcao, e.foto, e.atuacao ? `<small>${safe(e.atuacao)}</small>` : '')).join('')}</div>`).join('');
+  const br = iso => iso ? iso.split('-').reverse().join('/') : '';
+  const orgaos = [['conselho', 'Conselho Escolar'], ['app', 'APP — Associação de Pais e Professores']].filter(([k]) => col[k]);
+  document.getElementById('colegiadosPub').innerHTML = orgaos.map(([k, t]) => { const c = col[k], l = [...c.membros].sort((a, b) => (a.condicao === 'suplente') - (b.condicao === 'suplente'));
+    return `<h3 class="eq-grupo">${t}</h3><p class="sub" style="margin-top:-6px">${safe(c.nome)} · mandato de ${br(c.inicio)} a ${br(c.fim)}</p><div class="pessoas">${l.map(m => pessoa(m.nome, m.cargo || 'Membro', m.foto, [m.segmento, m.condicao === 'suplente' ? 'suplente' : ''].filter(Boolean).length ? `<small>${safe([m.segmento, m.condicao === 'suplente' ? 'suplente' : ''].filter(Boolean).join(' · '))}</small>` : '')).join('')}</div>`; }).join('');
+  const tem = grupos.length || orgaos.length;
+  document.getElementById('equipe').hidden = !tem; document.getElementById('menuEquipe').hidden = !tem;
+  if (!grupos.length && orgaos.length) document.querySelector('#equipe .sub').textContent = 'Colegiados que participam da gestão do CEI.';
+}
+const brl = c => (Number(c || 0) / 100).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+const dbr = iso => iso ? iso.split('-').reverse().join('/') : '';
+let contasData = null, contasAno = '';
+function renderContas(d) {
+  if (d) contasData = d;
+  const c = contasData; if (!c || !c.contas?.length) return;
+  const anos = [...new Set(c.contas.flatMap(x => x.anos.map(a => a.ano)))].sort().reverse();
+  if (!contasAno || !anos.includes(contasAno)) contasAno = anos[0];
+  document.getElementById('contas').hidden = false; document.getElementById('menuContas').hidden = false;
+  document.getElementById('contasAnos').innerHTML = anos.length > 1 ? anos.map(a => `<button type="button" role="tab" aria-selected="${a === contasAno}" class="${a === contasAno ? 'on' : ''}" data-ano="${a}">${a}</button>`).join('') : '';
+  const MOV = {entrada: 'Entrada', saida: 'Despesa', saldo_inicial: 'Saldo inicial'};
+  document.getElementById('contasLista').innerHTML = c.contas.map(conta => { const a = conta.anos.find(x => x.ano === contasAno); if (!a) return '';
+    const max = Math.max(1, ...a.porCategoria.map(x => x.valor));
+    return `<article class="conta"><header><h3>${safe(conta.label)}</h3><span>${contasAno}</span></header>
+      <div class="conta-nums"><div><small>Saldo inicial</small><b>${brl(a.saldoInicial)}</b></div><div><small>Entradas</small><b class="pos">+ ${brl(a.entradas)}</b></div><div><small>Despesas</small><b class="neg">− ${brl(a.saidas)}</b></div><div class="saldo"><small>Saldo</small><b>${brl(a.saldo)}</b></div></div>
+      ${a.natureza && (a.natureza.custeio.entradas || a.natureza.capital.entradas || a.natureza.custeio.saidas || a.natureza.capital.saidas) ? `<p class="conta-nat">Custeio: recebido ${brl(a.natureza.custeio.entradas)}, gasto ${brl(a.natureza.custeio.saidas)} · Capital: recebido ${brl(a.natureza.capital.entradas)}, gasto ${brl(a.natureza.capital.saidas)}</p>` : ''}
+      ${a.porCategoria.length ? `<h4>Despesas por categoria</h4><ul class="cats-bar">${a.porCategoria.map(x => `<li><span>${safe(x.categoria)}</span><i style="--w:${Math.max(2, Math.round(x.valor / max * 100))}%"></i><b>${brl(x.valor)}</b></li>`).join('')}</ul>` : ''}
+      ${a.extrato ? `<p class="conta-extrato">Saldo no extrato bancário em ${dbr(a.extrato.data)}: <b>${brl(a.extrato.valor)}</b></p>` : ''}
+      ${a.lancamentos?.length ? `<details><summary>Ver os ${a.lancamentos.length} lançamentos</summary><div class="tabela-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Fornecedor / origem</th><th>Categoria</th><th class="num">Valor</th></tr></thead><tbody>${a.lancamentos.map(l => `<tr><td>${dbr(l.data)}</td><td>${safe(l.descricao)}${l.documento ? `<small> · Doc. ${safe(l.documento)}</small>` : ''}${l.natureza ? `<small> · ${l.natureza === 'capital' ? 'Capital' : 'Custeio'}</small>` : ''}</td><td>${safe(l.fornecedor)}</td><td>${safe(l.categoria || MOV[l.movimento])}</td><td class="num ${l.movimento === 'saida' ? 'neg' : 'pos'}">${l.movimento === 'saida' ? '− ' : ''}${brl(l.valor)}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
+    </article>`; }).join('');
+}
+document.addEventListener('click', e => { const b = e.target.closest('#contasAnos button'); if (b) { contasAno = b.dataset.ano; renderContas(); } });
 function render() {
   const words = norm(q.value).trim().split(/\s+/).filter(Boolean);
   const byCat = {}; materials.forEach(m => { (byCat[m.category] = byCat[m.category] || []).push(m); });
@@ -107,7 +156,7 @@ function renderInfo(i) {
   if (i.address) document.getElementById('footAddr').textContent = 'CEI Lindolpho José da Silva · ' + i.address;
 }
 fetch('/api/public/home', {cache: 'no-store'}).then(r => { if (!r.ok) throw Error(); return r.json(); }).then(d => {
-  materials = d.materials || []; renderNotices(d.notices || []); renderInfo(d.info || {}); render();
+  materials = d.materials || []; renderNotices(d.notices || []); renderInfo(d.info || {}); renderEquipe(d); renderContas(d.contas); render();
 }).catch(() => { document.getElementById('docs').innerHTML = '<div class="empty">Não foi possível carregar os documentos agora. Tente novamente em instantes.</div>'; });
 })();
 </script>

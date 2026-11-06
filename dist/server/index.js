@@ -1,4 +1,4 @@
-import {identity, teacherState, mergeTeacher, portalApi} from './access.js';
+import {identity, teacherState, mergeTeacher, portalApi, fotosPublicas} from './access.js';
 import {handleAuthRoute, prepareRequest} from './auth.js';
 import { assets } from "./assets.js";
 import { seededDocuments } from "./seeded.js";
@@ -394,6 +394,22 @@ export default {
         }
         if(url.pathname.startsWith('/public-app-files/')&&user.role!=='admin')return fail('Acesso restrito.',403);
         return serveAsset(url);
+      }
+      // v51: fotos 3x4 da equipe e dos colegiados (JPEG/PNG até 600 KB; o navegador já envia recortada em 300x400).
+      if(url.pathname==='/api/portal/foto'&&request.method==='POST'){
+        if(user.role!=='admin')return fail('Operação exclusiva da administração.',403);
+        if(Number(request.headers.get('Content-Length')||0)>600*1024)return fail('Foto acima de 600 KB.',413);
+        const bytes=new Uint8Array(await request.arrayBuffer());
+        const mime=bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff?'image/jpeg':bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4e&&bytes[3]===0x47?'image/png':'';
+        if(!mime||bytes.length>600*1024)return fail('Envie uma foto JPG ou PNG de até 600 KB.',400);
+        const id=crypto.randomUUID();await bucket.put('cei/fotos/'+id,bytes,{httpMetadata:{contentType:mime}});return Response.json({id},{headers:{'Cache-Control':'no-store'}});
+      }
+      const fo=url.pathname.match(/^\/api\/(portal|public)\/foto\/([a-f0-9-]{36})$/);
+      if(fo&&request.method==='GET'){
+        const allowed=fo[1]==='portal'?user.role==='admin':fotosPublicas(user.data.portal||{}).has(fo[2]);
+        if(!allowed)return fail('Foto não disponível.',404);
+        const obj=await bucket.get('cei/fotos/'+fo[2]);if(!obj)return fail('Foto não encontrada.',404);
+        return new Response(obj.body,{headers:{'Content-Type':obj.httpMetadata?.contentType||'image/jpeg','Cache-Control':fo[1]==='public'?'public, max-age=300':'private, no-store','X-Content-Type-Options':'nosniff'}});
       }
       if(url.pathname==='/api/session'||url.pathname==='/api/public/materials'||url.pathname==='/api/public/home'||url.pathname.startsWith('/api/portal/')){
         const run=async()=>{const b=await activeBucket(env.BUCKET);return reply(await portalApi(request,b,await identity(request,env,b),listRecords,env))};

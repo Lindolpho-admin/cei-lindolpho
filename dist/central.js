@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '48';
+const CX_VERSION = '51';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -195,7 +195,7 @@ function cxBuildNav() {
   if (doc) frag.append(doc); frag.append(make('timbrado', '📄 Papel timbrado'));
   frag.append(group('Financeiro'), make('financeiro', '💰 Saldos e lançamentos'));
   frag.append(group('Colegiados'), make('colegiado', '◇ Conselho Escolar', {orgao: 'conselho'}), make('colegiado', '◉ APP', {orgao: 'app'}));
-  frag.append(group('Secretaria'), make('enturmacao', '🎂 Ver enturmação'));
+  frag.append(group('Secretaria'), make('equipe', '👥 Equipe da instituição'), make('enturmacao', '🎂 Ver enturmação'));
   if (esp) frag.append(esp); if (bib) frag.append(bib); if (solic) frag.append(solic);
   frag.append(group('Sistema'), make('publica', '🌐 Página pública'));
   if (acessos) frag.append(acessos); if (seg) frag.append(seg);
@@ -244,6 +244,7 @@ render = function () {
   if (state.view === 'enturmacao') { setHead('enturmacao'); cxMarkActive(); return cxRenderEnturmacao(a); }
   if (CX_ADMIN && state.view === 'atas') { setHead('atas'); cxMarkActive(); return cxRenderAtas(a); }
   if (CX_ADMIN && state.view === 'publica') { setHead('publica'); cxMarkActive(); return cxRenderPublic(a); }
+  if (CX_ADMIN && state.view === 'equipe') { document.getElementById('title').textContent = 'Equipe da instituição'; document.getElementById('subtitle').textContent = 'Gestão, professores, administrativo e apoio — com foto para a página pública'; cxMarkActive(); return cxRenderEquipe(a); }
   if (CX_ADMIN && state.view === 'colegiado') { const o = CX_ORGAOS[cx.orgao] || CX_ORGAOS.conselho; document.getElementById('title').textContent = o.titulo; document.getElementById('subtitle').textContent = 'Composição atual, mandatos anteriores e documentos'; cxMarkActive(); return cxRenderColegiado(a); }
   if (CX_ADMIN && state.view === 'financeiro') { setHead('financeiro'); cxMarkActive(); return cxRenderFinance(a); }
   if (CX_TEACHER && state.view === 'dashboard') { cxBaseRender(); cxMarkActive(); return cxRenderTeacherHome(a); }
@@ -285,7 +286,16 @@ function cxRenderDashboard(a) {
     if (atasSem) todo.push([atasSem, 'ata(s) redigida(s) sem PDF assinado', "cxGo('arquivo',{kind:'ata'})"]);
     const fin = cxFinance(cx.finYear);
     fin.accounts.filter(x => x.recon && Math.abs(x.recon.diff) >= 1).forEach(x => todo.push(['R$', `${CX_ACCOUNTS[x.account].label}: diferença de ${cxMoney(x.recon.diff)} em relação ao extrato de ${cxBR(x.recon.date)}`, "cxGo('financeiro')"]));
-    document.getElementById('cxTodo').innerHTML = todo.length ? todo.map(([n, t, go]) => `<li><span><b class="cx-n">${n}</b>${cxEsc(t)}</span><button class="cx-btn small" onclick="${go}">Abrir</button></li>`).join('') : '<li><span>✓ Nada pendente. Tudo em dia.</span></li>';
+    const drawTodo = () => { const el = document.getElementById('cxTodo'); if (el) el.innerHTML = todo.length ? todo.map(([n, t, go, cls]) => `<li${cls ? ` class="${cls}"` : ''}><span><b class="cx-n">${n}</b>${cxEsc(t)}</span><button class="cx-btn small" onclick="${go}">Abrir</button></li>`).join('') : '<li><span>✓ Nada pendente. Tudo em dia.</span></li>'; };
+    drawTodo();
+    // Mandatos da APP e do Conselho: vencidos primeiro, depois os que vencem em até 60 dias.
+    if (CX_ADMIN) cxLoadColegiados(true).then(all => {
+      if (state.view !== 'dashboard') return;
+      const al = cxColegAlertas(all), ordem = {vencido: 0, vence: 1, vazio: 2};
+      const itens = al.sort((a, b) => ordem[a.nivel] - ordem[b.nivel]).map(a => [a.nivel === 'vence' ? `${a.dias}d` : a.nivel === 'vencido' ? '!' : '+', a.texto, `cxGo('colegiado',{orgao:'${a.orgao}'})`, 'cx-todo-' + a.nivel]);
+      todo.unshift(...itens.filter(i => i[3] !== 'cx-todo-vazio')); todo.push(...itens.filter(i => i[3] === 'cx-todo-vazio'));
+      drawTodo();
+    }).catch(() => {});
     const used = fin.accounts.filter(x => x.count);
     document.getElementById('cxDashSaldos').innerHTML = used.length ? `<ul class="cx-todo">${used.map(x => `<li><span>${cxEsc(CX_ACCOUNTS[x.account].label)}</span><b class="cx-num">${cxMoney(x.balance)}</b></li>`).join('')}</ul>` : '<p class="muted">Nenhum lançamento financeiro neste ano. Lance notas fiscais, repasses e saldos de extrato para acompanhar os saldos.</p>';
     const recent = cx.records.slice().sort((x, y) => String(y.createdAt || '').localeCompare(String(x.createdAt || ''))).slice(0, 6);
@@ -769,16 +779,49 @@ function cxSituacao(c) {
   if (c.inicio > h) return {k: 'futura', label: 'A iniciar', cls: 'pub'};
   if (c.fim < h) return {k: 'encerrada', label: 'Mandato encerrado', cls: 'bad'};
   const dias = Math.round((new Date(c.fim + 'T12:00:00Z') - new Date(h + 'T12:00:00Z')) / 86400000);
-  return dias <= 60 ? {k: 'vigente', label: `Vigente · vence em ${dias} dia(s)`, cls: 'warn', dias} : {k: 'vigente', label: 'Vigente', cls: 'ok', dias};
+  return dias <= CX_COLEG_AVISO_DIAS ? {k: 'vigente', label: `Vigente · vence em ${dias} dia(s)`, cls: 'warn', dias} : {k: 'vigente', label: 'Vigente', cls: 'ok', dias};
+}
+// v50: avisos de mandato para o Início e para o menu.
+const CX_COLEG_AVISO_DIAS = 60;
+function cxColegAlertas(all) {
+  const h = cxHoje(), out = [], dias = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 86400000);
+  for (const orgao of ['conselho', 'app']) {
+    const O = CX_ORGAOS[orgao], nome = orgao === 'app' ? 'APP' : 'Conselho Escolar', list = (all && all[orgao]) || [];
+    const vig = list.filter(c => c.inicio <= h && c.fim >= h), fut = list.filter(c => c.inicio > h).sort((a, b) => a.inicio.localeCompare(b.inicio));
+    if (!list.length) { out.push({orgao, nivel: 'vazio', texto: `${nome}: composição atual ainda não cadastrada`}); continue; }
+    if (!vig.length) {
+      const fim = list.map(c => c.fim).filter(f => f < h).sort().pop();
+      out.push({orgao, nivel: 'vencido', texto: fut.length
+        ? `${nome}: nenhuma composição vigente hoje; a próxima (${fut[0].nome}) começa em ${cxBR(fut[0].inicio)}`
+        : `${nome}: mandato encerrado em ${cxBR(fim)}. Cadastre a nova ${orgao === 'app' ? 'diretoria' : 'composição'}`});
+      continue;
+    }
+    const fimVig = vig.map(c => c.fim).sort().pop(), d = dias(h, fimVig);
+    const sucessora = fut.some(c => dias(fimVig, c.inicio) <= 1);
+    if (d <= CX_COLEG_AVISO_DIAS && !sucessora) out.push({orgao, nivel: 'vence', dias: d, texto: `${nome}: mandato ${d === 0 ? 'vence hoje' : d === 1 ? 'vence amanhã' : `vence em ${d} dias`} (${cxBR(fimVig)}). Prepare a eleição e cadastre a nova ${orgao === 'app' ? 'chapa' : 'composição'}`});
+  }
+  return out;
+}
+function cxColegBadges(alertas) {
+  document.querySelectorAll('#nav button[data-view="colegiado"]').forEach(b => {
+    let orgao; try { orgao = JSON.parse(b.dataset.cxPreset || '{}').orgao; } catch {}
+    const a = alertas.find(x => x.orgao === orgao && x.nivel !== 'vazio');
+    let badge = b.querySelector('.cx-count');
+    if (!a) { badge?.remove(); return; }
+    if (!badge) { badge = document.createElement('span'); badge.className = 'cx-count'; b.append(' ', badge); }
+    badge.textContent = '!'; badge.title = a.texto;
+    badge.style.background = a.nivel === 'vencido' ? '#e0483b' : '';
+    badge.style.color = a.nivel === 'vencido' ? '#fff' : '';
+  });
 }
 async function cxLoadColegiados(force) {
-  if (!cx.colegiados || force) cx.colegiados = await cxRequest('/api/portal/colegiados');
+  if (!cx.colegiados || force) { cx.colegiados = await cxRequest('/api/portal/colegiados'); try { cxColegBadges(cxColegAlertas(cx.colegiados)); } catch {} }
   return cx.colegiados;
 }
 function cxMembrosTabela(c, contatos = true) {
   const ordem = m => (m.condicao === 'suplente' ? 1 : 0);
   const list = [...c.membros].sort((a, b) => ordem(a) - ordem(b));
-  return `<div class="cx-table-wrap"><table class="cx-table"><thead><tr><th>Nome</th><th>Cargo / função</th><th>Segmento</th>${contatos ? '<th>Telefone</th><th>E-mail</th>' : ''}</tr></thead><tbody>${list.map(m => `<tr><td><b>${cxEsc(m.nome)}</b>${m.condicao === 'suplente' ? ' <span class="cx-chip">suplente</span>' : ''}</td><td>${cxEsc(m.cargo)}</td><td>${cxEsc(m.segmento)}</td>${contatos ? `<td>${m.telefone ? `<a href="tel:${cxEsc(m.telefone.replace(/[^\d+]/g, ''))}">${cxEsc(m.telefone)}</a>${m.telefone.replace(/\D/g, '').length >= 10 ? ` <a class="cx-chip ok" href="https://wa.me/55${cxEsc(m.telefone.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}` : '—'}</td><td>${m.email ? `<a href="mailto:${cxEsc(m.email)}">${cxEsc(m.email)}</a>` : '—'}</td>` : ''}</tr>`).join('')}</tbody></table></div>`;
+  return `<div class="cx-table-wrap"><table class="cx-table"><thead><tr><th style="width:52px"></th><th>Nome</th><th>Cargo / função</th><th>Segmento</th>${contatos ? '<th>Telefone</th><th>E-mail</th>' : ''}</tr></thead><tbody>${list.map(m => `<tr><td>${cxFotoThumb(cxFotoMembro(m), m.nome, 40)}</td><td><b>${cxEsc(m.nome)}</b>${m.condicao === 'suplente' ? ' <span class="cx-chip">suplente</span>' : ''}</td><td>${cxEsc(m.cargo)}</td><td>${cxEsc(m.segmento)}</td>${contatos ? `<td>${m.telefone ? `<a href="tel:${cxEsc(m.telefone.replace(/[^\d+]/g, ''))}">${cxEsc(m.telefone)}</a>${m.telefone.replace(/\D/g, '').length >= 10 ? ` <a class="cx-chip ok" href="https://wa.me/55${cxEsc(m.telefone.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}` : '—'}</td><td>${m.email ? `<a href="mailto:${cxEsc(m.email)}">${cxEsc(m.email)}</a>` : '—'}</td>` : ''}</tr>`).join('')}</tbody></table></div>`;
 }
 function cxChapaCard(c, orgao, destaque) {
   const s = cxSituacao(c), O = CX_ORGAOS[orgao];
@@ -790,6 +833,7 @@ function cxChapaCard(c, orgao, destaque) {
 async function cxRenderColegiado(a) {
   const orgao = CX_ORGAOS[cx.orgao] ? cx.orgao : 'conselho', O = CX_ORGAOS[orgao];
   a.innerHTML = '<div class="panel" style="margin-top:0"><p class="muted">Carregando…</p></div>';
+  await cxLoadEquipe().catch(() => {});
   let all; try { all = (await cxLoadColegiados())[orgao] || []; } catch (e) { a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-empty">${cxEsc(e.message)}</div></div>`; return; }
   if (state.view !== 'colegiado' || cx.orgao !== orgao) return;
   const h = cxHoje(), sorted = [...all].sort((x, y) => String(y.inicio).localeCompare(String(x.inicio)));
@@ -800,13 +844,20 @@ async function cxRenderColegiado(a) {
       ${aviso}<div style="display:grid;gap:12px;margin-top:12px">${vigentes.map(c => cxChapaCard(c, orgao, true)).join('')}</div></div>
     ${futuras.length ? `<div class="panel"><div class="cx-head"><h2>A iniciar</h2></div><div style="display:grid;gap:12px;margin-top:10px">${futuras.map(c => cxChapaCard(c, orgao, false)).join('')}</div></div>` : ''}
     ${antigas.length ? `<div class="panel"><div class="cx-head"><h2>Histórico de mandatos</h2></div><div style="display:grid;gap:12px;margin-top:10px">${antigas.map(c => cxChapaCard(c, orgao, false)).join('')}</div></div>` : ''}
+    ${orgao === 'app' ? '<div id="cxAppContas"></div>' : ''}
     <div class="panel"><div class="cx-head"><div><h2>Documentos ${orgao === 'app' ? 'da APP' : 'do Conselho'}</h2><p>${cxEsc(O.doc)}.</p></div><div class="cx-btns"><button class="cx-btn primary" onclick="cxGo('arquivo',{area:'${orgao}'})">Abrir pasta no Arquivo central</button><button class="cx-btn" onclick="cxGo('atas')">✎ Redigir ata</button></div></div><div id="cxColDocs" style="margin-top:10px"><p class="muted">Carregando…</p></div></div>`;
+  if (orgao === 'app') Promise.all([cxLoad(true), cxLoadTransp()]).then(([, t]) => {
+    const el = document.getElementById('cxAppContas'); if (!el) return;
+    const ano = String(new Date().getFullYear()), acc = cxFinance(ano).accounts.find(x => x.account === 'SICOOB');
+    el.innerHTML = `<div class="panel"><div class="cx-head"><div><h2>Prestação de contas da APP · ${ano}</h2><p>Resumo da conta Sicoob (recursos próprios), a partir dos lançamentos do Financeiro.</p></div><div class="cx-btns"><button class="cx-btn" onclick="cx.finAccount='SICOOB';cxGo('financeiro')">Abrir lançamentos</button></div></div>
+      <div class="cx-stats" style="margin-top:12px"><div class="cx-stat"><small>Saldo inicial</small><b>${cxMoney(acc.initial)}</b></div><div class="cx-stat"><small>Entradas</small><b>${cxMoney(acc.inflow)}</b></div><div class="cx-stat"><small>Saídas</small><b>${cxMoney(acc.outflow)}</b></div><div class="cx-stat"><small>Saldo</small><b>${cxMoney(acc.balance)}</b></div></div></div>` + cxTranspPanel(t, 'SICOOB');
+  }).catch(() => {});
   cxLoad().then(() => { const el = document.getElementById('cxColDocs'); if (!el) return; const items = cxAllItems().filter(x => x.area === orgao).sort((x, y) => String(y.date).localeCompare(String(x.date))).slice(0, 8);
     el.innerHTML = items.length ? items.map(x => cxItemHTML(x, true)).join('') + '<p class="hint">Mostrando os 8 mais recentes.</p>' : '<div class="cx-empty">Nenhum documento nesta pasta ainda.</div>'; }).catch(() => {});
 }
 function cxMembroRow(m = {}, O) {
-  return `<div class="cx-membro">
-    <label class="cx-m-nome">Nome<input data-m="nome" value="${cxEsc(m.nome || '')}" maxlength="120"></label>
+  return `<div class="cx-membro"><div class="cx-m-foto">${cxFotoPicker(m.foto, 'data-m="foto"')}</div>
+    <label class="cx-m-nome">Nome<input data-m="nome" list="cxEquipeNomes" value=""${cxEsc(m.nome || '')}" maxlength="120"></label>
     <label>Cargo / função<input data-m="cargo" list="cxCargos" value="${cxEsc(m.cargo || '')}" maxlength="80"></label>
     <label>Segmento<input data-m="segmento" list="cxSegmentos" value="${cxEsc(m.segmento || '')}" maxlength="60"></label>
     <label>Condição<select data-m="condicao"><option value="titular">Titular</option><option value="suplente" ${m.condicao === 'suplente' ? 'selected' : ''}>Suplente</option></select></label>
@@ -815,6 +866,7 @@ function cxMembroRow(m = {}, O) {
     <button type="button" class="cx-btn small danger cx-m-del" onclick="this.closest('.cx-membro').remove()" aria-label="Remover membro">✕ Remover</button></div>`;
 }
 window.cxChapaForm = async (orgao, id, copy = false) => {
+  await cxLoadEquipe().catch(() => {});
   const O = CX_ORGAOS[orgao], all = (await cxLoadColegiados())[orgao] || [], base = id ? all.find(c => c.id === id) : null;
   const c = base ? (copy ? {nome: '', inicio: base.fim < cxHoje() ? cxHoje() : base.fim, fim: '', membros: base.membros, ata: '', observacoes: ''} : base) : {membros: O.cargos.slice(0, 4).map(cargo => ({cargo}))};
   const titulo = base && !copy ? `Editar: ${base.nome}` : `Nova ${orgao === 'app' ? 'chapa / diretoria da APP' : 'composição do Conselho Escolar'}`;
@@ -823,11 +875,12 @@ window.cxChapaForm = async (orgao, id, copy = false) => {
       <label class="full">Nome da ${orgao === 'app' ? 'chapa / gestão' : 'composição / gestão'}<input name="nome" required maxlength="120" value="${cxEsc(c.nome || '')}" placeholder="${orgao === 'app' ? 'Ex.: Chapa União — Gestão 2026–2027' : 'Ex.: Conselho Escolar — Mandato 2026–2027'}"></label>
       <label>Início do mandato<input name="inicio" type="date" required value="${cxEsc(c.inicio || '')}"></label>
       <label>Validade (fim do mandato)<input name="fim" type="date" required value="${cxEsc(c.fim || '')}"></label>
+      <label class="full cx-check"><input type="checkbox" name="publico" ${c.publico === false ? '' : 'checked'}> Mostrar esta composição na página pública (somente nome, cargo, segmento e foto — nunca telefone ou e-mail)</label>
       <label class="full">Ata de eleição / posse (referência)<input name="ata" maxlength="160" value="${cxEsc(c.ata || '')}" placeholder="Ex.: Ata nº 02/2026, de 15/03/2026"></label>
-      <div class="full"><b>Membros</b><p class="hint" style="margin:2px 0 4px">Linhas sem nome são ignoradas. Telefone e e-mail ficam só na área restrita (não aparecem na página pública).</p><div id="cxMembros">${(c.membros?.length ? c.membros : [{}]).map(m => cxMembroRow(m, O)).join('')}</div>
+      <div class="full"><b>Membros</b><p class="hint" style="margin:2px 0 4px">Linhas sem nome são ignoradas. Telefone e e-mail ficam só na área restrita. Clique no quadro 3x4 para pôr a foto; se a pessoa já tem foto na Equipe da instituição, ela é usada automaticamente.</p><div id="cxMembros">${(c.membros?.length ? c.membros : [{}]).map(m => cxMembroRow(m, O)).join('')}</div>
         <button type="button" class="cx-btn small" style="margin-top:8px" onclick="document.getElementById('cxMembros').insertAdjacentHTML('beforeend', cxMembroRow({}, CX_ORGAOS['${orgao}']))">+ Adicionar membro</button></div>
       <label class="full">Observações<textarea name="observacoes" rows="2" maxlength="1500">${cxEsc(c.observacoes || '')}</textarea></label>
-      <datalist id="cxCargos">${O.cargos.map(x => `<option value="${cxEsc(x)}">`).join('')}</datalist><datalist id="cxSegmentos">${O.segmentos.map(x => `<option value="${cxEsc(x)}">`).join('')}</datalist>
+      <datalist id="cxEquipeNomes">${(cx.equipe || []).map(e => `<option value="${cxEsc(e.nome)}">`).join('')}</datalist><datalist id="cxCargos">${O.cargos.map(x => `<option value="${cxEsc(x)}">`).join('')}</datalist><datalist id="cxSegmentos">${O.segmentos.map(x => `<option value="${cxEsc(x)}">`).join('')}</datalist>
       <p class="hint full" id="cxChapaErr" style="color:#b3261e" hidden></p>
       <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar</button></div></form>`);
 };
@@ -835,7 +888,7 @@ window.cxMembroRow = cxMembroRow;
 window.cxChapaSave = async (orgao, id) => {
   const f = document.getElementById('cxChapaF'), err = document.getElementById('cxChapaErr');
   const membros = [...f.querySelectorAll('.cx-membro')].map(row => Object.fromEntries([...row.querySelectorAll('[data-m]')].map(i => [i.dataset.m, i.value.trim()])));
-  const chapa = {id: id || undefined, nome: f.nome.value, inicio: f.inicio.value, fim: f.fim.value, ata: f.ata.value, observacoes: f.observacoes.value, membros};
+  const chapa = {id: id || undefined, publico: f.publico.checked, nome: f.nome.value, inicio: f.inicio.value, fim: f.fim.value, ata: f.ata.value, observacoes: f.observacoes.value, membros};
   try {
     await cxRequest('/api/portal/colegiados', {method: 'POST', body: JSON.stringify({orgao, chapa})});
     cxCloseModal(); await cxLoadColegiados(true); notify('Composição salva.'); render();
@@ -855,6 +908,168 @@ window.cxChapaPrint = async (orgao, id) => {
     bodyHtml: [...c.membros].sort((a, b) => (a.condicao === 'suplente') - (b.condicao === 'suplente')).map(m => `<p><b>${cxEsc(m.nome)}</b>${m.condicao === 'suplente' ? ' (suplente)' : ''}${m.cargo ? ' — ' + cxEsc(m.cargo) : ''}${m.segmento ? ' · ' + cxEsc(m.segmento) : ''}${m.telefone || m.email ? '<br>' + [m.telefone, m.email].filter(Boolean).map(cxEsc).join(' · ') : ''}</p>`).join('') + (c.observacoes ? `<p>${cxEsc(c.observacoes)}</p>` : ''),
     dateIso: cxHoje(), showDate: true, signers: [{name: 'Alysson Christiano Primor', role: 'Diretor Adjunto'}, ...c.membros.filter(m => /^presidente$/i.test(m.cargo.trim()) && m.condicao !== 'suplente').slice(0, 1).map(m => ({name: m.nome, role: `Presidente — ${O.curto}`}))]}, popup);
 };
+
+/* ---------- Fotos 3x4 e Equipe da instituição (v51) ---------- */
+cx.equipe = null;
+const CX_EQ_CATS = [['gestao', 'Gestão'], ['professores', 'Professores'], ['administrativo', 'Administrativo'], ['apoio', 'Apoio (limpeza, alimentação, manutenção)'], ['estagio', 'Estágio']];
+const cxNomeKey = s => cxNorm(s).replace(/\s+/g, ' ').trim();
+const cxIniciais = n => String(n || '').split(/\s+/).filter(w => w.length > 2).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+function cxFotoMembro(m) { if (m.foto) return m.foto; const e = (cx.equipe || []).find(x => x.foto && cxNomeKey(x.nome) === cxNomeKey(m.nome)); return e ? e.foto : ''; }
+function cxFotoThumb(id, nome, w = 48) {
+  const h = Math.round(w * 4 / 3);
+  return id ? `<img src="/api/portal/foto/${cxEsc(id)}" alt="" style="width:${w}px;height:${h}px;object-fit:cover;border-radius:8px;display:block">`
+    : `<span style="width:${w}px;height:${h}px;border-radius:8px;display:grid;place-items:center;background:#e9efff;color:#2f56b0;font-weight:800;font-size:${Math.round(w / 3)}px">${cxEsc(cxIniciais(nome))}</span>`;
+}
+function cxFotoPicker(id, attrs) {
+  return `<div class="cx-foto" title="Foto 3x4"><input type="hidden" ${attrs} value="${cxEsc(id || '')}">
+    <button type="button" class="cx-foto-box" onclick="this.nextElementSibling.click()">${id ? `<img src="/api/portal/foto/${cxEsc(id)}" alt="Foto">` : '<span>📷<br>Foto 3x4</span>'}</button>
+    <input type="file" accept="image/*" hidden onchange="cxFotoEscolher(this)">
+    ${id ? '<button type="button" class="cx-foto-x" onclick="cxFotoLimpar(this)" aria-label="Remover foto">✕</button>' : ''}</div>`;
+}
+// Recorta no centro em 3:4 e reduz para 300x400 JPEG no próprio navegador (fica leve e no padrão 3x4).
+async function cxFoto3x4(file) {
+  if (!file || !/^image\//.test(file.type)) throw Error('Escolha um arquivo de imagem (JPG ou PNG).');
+  if (file.size > 25 * 1024 * 1024) throw Error('Imagem muito grande (acima de 25 MB).');
+  const bmp = await createImageBitmap(file, {imageOrientation: 'from-image'}).catch(() => null);
+  const src = bmp || await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(Error('Não foi possível ler a imagem.')); i.src = URL.createObjectURL(file); });
+  const W = src.width, H = src.height, alvo = 3 / 4;
+  let sw = W, sh = H; if (W / H > alvo) sw = H * alvo; else sh = W / alvo;
+  const sx = (W - sw) / 2, sy = Math.max(0, (H - sh) * 0.35); // levemente para cima: rosto costuma ficar no terço superior
+  const c = document.createElement('canvas'); c.width = 300; c.height = 400;
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 300, 400); g.imageSmoothingQuality = 'high'; g.drawImage(src, sx, sy, sw, sh, 0, 0, 300, 400);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.86));
+  const res = await fetch('/api/portal/foto', {method: 'POST', headers: {'Content-Type': 'image/jpeg'}, body: blob});
+  const d = await res.json().catch(() => ({})); if (!res.ok) throw Error(d.error || 'Não foi possível enviar a foto.');
+  return d.id;
+}
+window.cxFotoEscolher = async input => {
+  const box = input.closest('.cx-foto'), btn = box.querySelector('.cx-foto-box'), hidden = box.querySelector('input[type=hidden]');
+  const file = input.files[0]; if (!file) return;
+  btn.innerHTML = '<span>Enviando…</span>';
+  try { const id = await cxFoto3x4(file); hidden.value = id; box.outerHTML = cxFotoPicker(id, cxAttrs(hidden)); }
+  catch (e) { notify(e.message); btn.innerHTML = hidden.value ? `<img src="/api/portal/foto/${cxEsc(hidden.value)}" alt="Foto">` : '<span>📷<br>Foto 3x4</span>'; }
+  finally { input.value = ''; }
+};
+window.cxFotoLimpar = btn => { const box = btn.closest('.cx-foto'), hidden = box.querySelector('input[type=hidden]'); hidden.value = ''; box.outerHTML = cxFotoPicker('', cxAttrs(hidden)); };
+const cxAttrs = el => [...el.attributes].filter(a => !['type', 'value'].includes(a.name)).map(a => `${a.name}="${cxEsc(a.value)}"`).join(' ');
+async function cxLoadEquipe(force) { if (!cx.equipe || force) cx.equipe = await cxRequest('/api/portal/equipe'); return cx.equipe; }
+
+async function cxRenderEquipe(a) {
+  a.innerHTML = '<div class="panel" style="margin-top:0"><p class="muted">Carregando…</p></div>';
+  let eq; try { eq = await cxLoadEquipe(true); } catch (e) { a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-empty">${cxEsc(e.message)}</div></div>`; return; }
+  if (state.view !== 'equipe') return;
+  const sorted = [...eq].sort((x, y) => (x.ordem - y.ordem) || x.nome.localeCompare(y.nome, 'pt-BR'));
+  const pub = eq.filter(e => e.publico !== false).length, comFoto = eq.filter(e => e.foto).length;
+  a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-head"><div><h2>Quem trabalha no CEI</h2><p>${eq.length} pessoa(s) · ${pub} na página pública · ${comFoto} com foto. Na página pública aparecem só <b>nome, função e foto</b>; vínculo, telefone e e-mail ficam aqui.</p></div>
+    <div class="cx-btns"><button class="cx-btn primary" onclick="cxPessoaForm()">+ Nova pessoa</button><button class="cx-btn" onclick="cxEquipeImportar()">⇪ Importar lista</button><a class="cx-btn" href="/#equipe" target="_blank" rel="noopener">Ver na página pública ↗</a></div></div>
+    <p class="hint" style="margin-top:8px">Antes de publicar fotos, tenha a autorização de uso de imagem de cada pessoa (LGPD). Quem não autorizar pode aparecer só com as iniciais, ou desmarcar “Mostrar na página pública”.</p></div>
+    ${eq.length ? CX_EQ_CATS.map(([k, t]) => { const l = sorted.filter(e => e.categoria === k); return l.length ? `<div class="panel"><div class="cx-head"><h2>${cxEsc(t)} <small class="muted" style="font-weight:600">(${l.length})</small></h2></div><div class="cx-equipe-grid">${l.map(e => `<article class="cx-pessoa${e.publico === false ? ' oculta' : ''}">
+      <button class="cx-pessoa-foto" onclick="cxPessoaForm('${e.id}')" title="Editar">${cxFotoThumb(e.foto, e.nome, 84)}</button>
+      <div><b>${cxEsc(e.nome)}</b><span>${cxEsc(e.funcao)}</span><small>${[e.vinculo, e.atuacao].filter(Boolean).map(cxEsc).join(' · ')}</small>
+      ${e.telefone || e.email ? `<small>${[e.telefone, e.email].filter(Boolean).map(cxEsc).join(' · ')}</small>` : ''}
+      <div class="cx-chips" style="margin-top:6px">${e.publico === false ? '<span class="cx-chip">Só interno</span>' : '<span class="cx-chip pub">Na página pública</span>'}${e.foto ? '' : '<span class="cx-chip warn">Sem foto</span>'}</div>
+      <div class="cx-btns" style="margin-top:6px"><button class="cx-btn small" onclick="cxPessoaForm('${e.id}')">✎ Editar</button><button class="cx-btn small danger" onclick="cxPessoaDelete('${e.id}')">Excluir</button></div></div></article>`).join('')}</div></div>` : ''; }).join('')
+      : '<div class="panel"><div class="cx-empty">Nenhuma pessoa cadastrada. Use “Importar lista” para colar a relação de servidores (nome e cargo) de uma vez, ou “+ Nova pessoa”.</div></div>'}`;
+}
+window.cxPessoaForm = async id => {
+  const e = id ? (await cxLoadEquipe()).find(x => x.id === id) : {categoria: 'professores', publico: true};
+  cxModal(`<h2>${id ? 'Editar: ' + cxEsc(e.nome) : 'Nova pessoa na equipe'}</h2>
+    <form class="cx-form cx-static-actions" id="cxPessoaF" onsubmit="event.preventDefault();cxPessoaSave('${id || ''}')">
+      <div class="full" style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">${cxFotoPicker(e.foto, 'name="foto"')}
+        <div style="flex:1;min-width:240px;display:grid;gap:10px"><label>Nome completo<input name="nome" required maxlength="120" value="${cxEsc(e.nome || '')}"></label>
+        <label>Função (como aparece para o público)<input name="funcao" required maxlength="100" list="cxFuncoes" value="${cxEsc(e.funcao || '')}" placeholder="Ex.: Professora de Educação Infantil"></label></div></div>
+      <label>Grupo<select name="categoria">${CX_EQ_CATS.map(([k, t]) => `<option value="${k}" ${e.categoria === k ? 'selected' : ''}>${cxEsc(t)}</option>`).join('')}</select></label>
+      <label>Vínculo (interno)<input name="vinculo" maxlength="40" list="cxVinculos" value="${cxEsc(e.vinculo || '')}" placeholder="Efetivo, ACT…"></label>
+      <label class="full">Atuação (opcional, aparece no público)<input name="atuacao" maxlength="120" value="${cxEsc(e.atuacao || '')}" placeholder="Ex.: Maternal II — matutino"></label>
+      <label>Telefone (interno)<input name="telefone" maxlength="40" value="${cxEsc(e.telefone || '')}"></label>
+      <label>E-mail (interno)<input name="email" type="email" maxlength="120" value="${cxEsc(e.email || '')}"></label>
+      <label class="full cx-check"><input type="checkbox" name="publico" ${e.publico === false ? '' : 'checked'}> Mostrar na página pública (nome, função, atuação e foto)</label>
+      <datalist id="cxFuncoes">${['Diretor(a)', 'Diretor(a) Adjunto(a)', 'Coordenador(a) Pedagógico(a)', 'Professor(a) de Educação Infantil', 'Professor(a) de Educação Física', 'Professor(a) de Arte', 'Segundo(a) Professor(a)', 'Auxiliar de Sala', 'Estagiário(a)', 'Merendeira', 'Servente', 'Auxiliar Administrativo', 'Secretário(a) Escolar'].map(x => `<option value="${x}">`).join('')}</datalist>
+      <datalist id="cxVinculos"><option value="Efetivo"><option value="ACT"><option value="Estágio"><option value="Terceirizado"></datalist>
+      <p class="hint full" id="cxPessoaErr" style="color:#b3261e" hidden></p>
+      <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar</button></div></form>`);
+};
+window.cxPessoaSave = async id => {
+  const f = document.getElementById('cxPessoaF'), old = id ? (cx.equipe || []).find(x => x.id === id) : null;
+  const pessoa = {id: id || undefined, foto: f.foto.value, nome: f.nome.value, funcao: f.funcao.value, categoria: f.categoria.value, vinculo: f.vinculo.value, atuacao: f.atuacao.value, telefone: f.telefone.value, email: f.email.value, publico: f.publico.checked, ordem: old?.ordem};
+  try { await cxRequest('/api/portal/equipe', {method: 'POST', body: JSON.stringify({pessoa})}); cxCloseModal(); notify('Equipe atualizada.'); render(); }
+  catch (e) { const el = document.getElementById('cxPessoaErr'); el.textContent = e.message; el.hidden = false; }
+};
+window.cxPessoaDelete = async id => {
+  const e = (cx.equipe || []).find(x => x.id === id); if (!e) return;
+  if (!await cxConfirmTyped(e.nome, 'A pessoa sai da equipe e da página pública. A foto também é apagada.')) return;
+  try { await cxRequest('/api/portal/equipe', {method: 'POST', body: JSON.stringify({id, delete: true})}); notify('Pessoa removida da equipe.'); render(); } catch (err) { notify(err.message); }
+};
+// Importação: cole a relação (de planilha ou do sistema da Prefeitura) com nome e cargo, uma pessoa por linha.
+function cxCargoParaEquipe(cargo) {
+  const c = cxNomeKey(cargo), vinc = /\bact\b/.test(c) ? 'ACT' : /efetiv/.test(c) ? 'Efetivo' : /estag/.test(c) ? 'Estágio' : '';
+  const r = (categoria, funcao) => ({categoria, funcao, vinculo: vinc});
+  if (/diretor.*adjunt/.test(c)) return r('gestao', 'Diretor(a) Adjunto(a)');
+  if (/diretor|gestor/.test(c)) return r('gestao', 'Diretor(a)');
+  if (/coorden|supervis|orientad/.test(c)) return r('gestao', 'Coordenação Pedagógica');
+  if (/prof.*(educ(acao|\.)? ?fisica|ed\.? ?fisica)/.test(c)) return r('professores', 'Professor(a) de Educação Física');
+  if (/prof.*arte/.test(c)) return r('professores', 'Professor(a) de Arte');
+  if (/segundo prof|2[ºo] prof/.test(c)) return r('professores', 'Segundo(a) Professor(a)');
+  if (/prof/.test(c)) return r('professores', 'Professor(a) de Educação Infantil');
+  if (/estag/.test(c)) return r('estagio', 'Estagiário(a)');
+  if (/merend|cozinh/.test(c)) return r('apoio', 'Merendeira');
+  if (/servent|limpez|zelad/.test(c)) return r('apoio', 'Servente');
+  if (/vigia|vigilan|porteir|manuten/.test(c)) return r('apoio', cxTextCase.nameCase(String(cargo).toLocaleLowerCase('pt-BR').replace(/\b(act|efetivo)\b/g, '').trim(), true));
+  if (/secret|administ|auxiliar adm|agente adm/.test(c)) return r('administrativo', cxTextCase.nameCase(String(cargo).toLocaleLowerCase('pt-BR').replace(/\b(act|efetivo)\b/g, '').trim(), true));
+  if (/auxiliar|monitor|cuidador/.test(c)) return r('professores', 'Auxiliar de Sala');
+  return r('apoio', cxTextCase.nameCase(String(cargo).toLocaleLowerCase('pt-BR').replace(/\b(act|efetivo)\b/g, '').trim(), true) || 'Equipe');
+}
+function cxParseEquipe(text) {
+  const out = [];
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    let cols = raw.split(/\t|;|\s{2,}|\|/).map(x => x.trim()).filter(Boolean);
+    cols = cols.filter(x => !/^\d+$/.test(x)); // remove códigos/matrículas
+    if (!cols.length || /^nome$/i.test(cols[0])) continue;
+    let nome = cols[0], cargo = cols.slice(1).join(' ');
+    if (!cargo) { const m = nome.match(/^(.*?)\s+((?:prof|servent|merend|estag|diret|coorden|secret|auxil|vigi|monitor|agente).*)$/i); if (m) { nome = m[1]; cargo = m[2]; } }
+    nome = nome.replace(/^\d+\s*/, '');
+    if (nome.length < 3) continue;
+    out.push({nome: cxTextCase.nameCase(nome, true), cargoOriginal: cargo, ...cxCargoParaEquipe(cargo)});
+  }
+  return out;
+}
+window.cxEquipeImportar = () => {
+  cxModal(`<h2>Importar lista da equipe</h2><p class="muted">Cole a relação com <b>nome e cargo</b>, uma pessoa por linha. Pode copiar direto da planilha ou do sistema da Prefeitura (colunas separadas por tabulação). Números de matrícula são ignorados. Quem já estiver cadastrado com o mesmo nome não é duplicado.</p>
+    <div class="cx-form cx-static-actions"><label class="full">Lista<textarea id="cxImpTxt" rows="8" data-case="off" placeholder="ALINE RODRIGUES DA SILVA	PROF(A) EDUC. INFANTIL ACT&#10;JAQUELINE DE LIMA JAQUES PINHEIRO	SERVENTE EFETIVO"></textarea></label>
+    <div class="full" id="cxImpPrev"></div>
+    <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" id="cxImpOk" disabled onclick="cxEquipeImportarOk()">Importar</button></div></div>`);
+  const ta = document.getElementById('cxImpTxt');
+  ta.addEventListener('input', () => {
+    const l = cxParseEquipe(ta.value); cx._imp = l;
+    document.getElementById('cxImpOk').disabled = !l.length; document.getElementById('cxImpOk').textContent = l.length ? `Importar ${l.length} pessoa(s)` : 'Importar';
+    document.getElementById('cxImpPrev').innerHTML = l.length ? `<div class="cx-table-wrap"><table class="cx-table"><thead><tr><th>Nome</th><th>Função (público)</th><th>Grupo</th><th>Vínculo</th></tr></thead><tbody>${l.map(p => `<tr><td>${cxEsc(p.nome)}</td><td>${cxEsc(p.funcao)}</td><td>${cxEsc((CX_EQ_CATS.find(c => c[0] === p.categoria) || [])[1] || '')}</td><td>${cxEsc(p.vinculo)}</td></tr>`).join('')}</tbody></table></div><p class="hint">Depois de importar, ajuste cada pessoa em “Editar” (por exemplo, a função de quem está na direção) e acrescente as fotos.</p>` : '';
+  });
+};
+window.cxEquipeImportarOk = async () => {
+  const l = cx._imp || []; if (!l.length) return;
+  try { await cxRequest('/api/portal/equipe', {method: 'POST', body: JSON.stringify({importar: l.map(({cargoOriginal, ...p}) => p)})}); cxCloseModal(); notify(`${l.length} pessoa(s) importada(s).`); render(); }
+  catch (e) { notify(e.message); }
+};
+
+/* ---------- Prestação de contas pública (v51) ---------- */
+cx.transp = null;
+async function cxLoadTransp(force) { if (!cx.transp || force) cx.transp = await cxRequest('/api/portal/transparencia'); return cx.transp; }
+function cxTranspPanel(t, soConta) {
+  const contas = soConta ? [soConta] : Object.keys(t.rotulos);
+  return `<div class="panel cx-transp"><div class="cx-head"><div><h2>Prestação de contas na página pública</h2><p>Publica, para cada conta marcada: saldo inicial, entradas, saídas, saldo, despesas por categoria${soConta ? '' : ', custeio/capital'} e o último saldo de extrato, calculados a partir dos lançamentos do Financeiro. Observações internas e arquivos não são publicados.</p></div>
+    <div class="cx-btns"><a class="cx-btn" href="/#contas" target="_blank" rel="noopener">Ver na página pública ↗</a></div></div>
+    <div class="cx-transp-opts">${contas.map(k => `<label class="cx-check"><input type="checkbox" data-conta="${k}" ${t.contas.includes(k) ? 'checked' : ''} onchange="cxTranspSave(this)"> ${cxEsc(t.rotulos[k])}</label>`).join('')}
+    <label class="cx-check"><input type="checkbox" data-detalhar ${t.detalhar !== false ? 'checked' : ''} onchange="cxTranspSave(this)"> Mostrar cada lançamento (data, descrição, fornecedor, categoria e valor)</label></div>
+    <p class="hint">Antes de publicar, confira se as descrições dos lançamentos não têm dados pessoais (por exemplo, nome de família que contribuiu ou CPF).</p></div>`;
+}
+window.cxTranspSave = async el => {
+  const t = await cxLoadTransp(), contas = new Set(t.contas);
+  if (el.dataset.conta) { el.checked ? contas.add(el.dataset.conta) : contas.delete(el.dataset.conta); }
+  const detalhar = el.dataset.detalhar !== undefined ? el.checked : t.detalhar !== false;
+  try { await cxRequest('/api/portal/transparencia', {method: 'POST', body: JSON.stringify({contas: [...contas], detalhar})}); await cxLoadTransp(true); notify(el.dataset.conta ? (el.checked ? 'Conta publicada na prestação de contas.' : 'Conta retirada da página pública.') : 'Preferência salva.'); }
+  catch (e) { el.checked = !el.checked; notify(e.message); }
+};
+{ const draw = cxDrawFinance; cxDrawFinance = function (a) { draw(a); cxLoadTransp().then(t => { if (state.view === 'financeiro' && !a.querySelector('.cx-transp')) a.insertAdjacentHTML('beforeend', cxTranspPanel(t)); }).catch(() => {}); }; }
 
 /* ---------- Papel timbrado livre (professores e administração) ---------- */
 function cxTimbradoDocs() { return (state.generatedDocs || []).filter(g => g.template === 'documentoTimbrado' && (!CX_TEACHER || g.ownerEmail === CX_SESSION.email || !g.ownerEmail)).sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt))); }

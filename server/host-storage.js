@@ -41,7 +41,9 @@ export async function storageApi(request,raw,{records,assets}){
  const before=await signature(bucket),state=JSON.parse(await (await bucket.get(STATE)).text()),catalog=await records(bucket),files=[];
  for(const record of catalog)for(const field of ['file','signedFile'])if(record[field])files.push({recordId:record.id,field,...record[field]});
  if(before!==await signature(bucket))problem('A base mudou durante a leitura. Tente novamente.',409);
- return json({format:'cei-admin-complete-backup',version:2,createdAt:new Date().toISOString(),snapshot:before,state,archive:{records:catalog,files}});
+ // v51: fotos 3x4 (pequenas) vão dentro do próprio backup.
+ const fotos=[];let cur;do{const page=await bucket.list({prefix:'cei/fotos/',cursor:cur});for(const o of page.objects){const obj=await bucket.get(o.key);if(!obj)continue;const b=new Uint8Array(await obj.arrayBuffer());let bin='';for(let i=0;i<b.length;i+=32768)bin+=String.fromCharCode(...b.subarray(i,i+32768));fotos.push({id:o.key.slice(10),mime:obj.httpMetadata?.contentType||'image/jpeg',base64:btoa(bin)})}cur=page.truncated?page.cursor:undefined}while(cur);
+ return json({format:'cei-admin-complete-backup',version:2,createdAt:new Date().toISOString(),snapshot:before,state,archive:{records:catalog,files},fotos});
  }
  if(path==='backup/check'&&request.method==='GET')return json({snapshot:await signature(bucket)});
  if(path==='backup/file'&&request.method==='GET'){
@@ -60,6 +62,9 @@ export async function storageApi(request,raw,{records,assets}){
  for(const r of input.archive.records){if(!/^[a-f0-9-]{36}$/.test(r.id)||ids.has(r.id))problem('Identificação de documento inválida ou repetida.');ids.add(r.id);for(const field of ['file','signedFile'])if(r[field])expected.add(r.id+':'+field)}
  for(const f of input.archive.files){const key=f.recordId+':'+f.field;if(!expected.delete(key)||!Number.isInteger(f.size)||f.size<1||f.size>20*1024*1024||!/^[a-f0-9]{64}$/.test(f.sha256))problem('Lista de anexos inválida.');delete f.base64}
  if(expected.size)problem('Backup incompleto: faltam anexos.');
+ const fotos=Array.isArray(input.fotos)?input.fotos:[];if(fotos.length>500)problem('Fotos demais no backup.');
+ for(const f of fotos)if(!/^[a-f0-9-]{36}$/.test(f?.id||'')||!['image/jpeg','image/png'].includes(f.mime)||typeof f.base64!=='string'||f.base64.length>820000)problem('Foto inválida no backup.');
+ input.fotos=fotos;
  const id=crypto.randomUUID(),job={...input,id,source:await signature(bucket),expires:Date.now()+86400000};
  await raw.put('restore/'+id+'.json',JSON.stringify(job));return json({id,files:job.archive.files.length});
  }
@@ -77,6 +82,7 @@ export async function storageApi(request,raw,{records,assets}){
  const current=await activeBucket(raw);if(await signature(current)!==job.source)problem('A base foi alterada durante o envio. Reinicie a restauração para não perder alterações recentes.',409);
  for(const meta of job.archive.files){const object=await raw.get(prefix+'app/files/'+meta.recordId+'/'+meta.field);if(!object||object.size!==meta.size||await digest(await object.arrayBuffer())!==meta.sha256)problem('Há anexos ausentes ou corrompidos. A base atual foi preservada.');}
  for(const record of job.archive.records){record.seeded=false;for(const field of ['file','signedFile'])if(record[field])record[field].key='app/files/'+record.id+'/'+field;await raw.put(prefix+'app/records/'+record.id+'.json',JSON.stringify(record));}
+ for(const f of job.fotos||[])await raw.put(prefix+'cei/fotos/'+f.id,Uint8Array.from(atob(f.base64),c=>c.charCodeAt(0)),{httpMetadata:{contentType:f.mime}});
  job.state.savedAt=new Date().toISOString();await raw.put(prefix+STATE,JSON.stringify(job.state));
  await raw.put(POINTER,JSON.stringify({id:job.id,restoredAt:new Date().toISOString(),previous:current.generation}));
  await raw.delete('restore/'+job.id+'.json');return json({restored:true});

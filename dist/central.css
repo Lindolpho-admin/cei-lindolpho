@@ -207,3 +207,26 @@ button.cx-chip:hover{background:#dfe8f7}
 .cx-membro{display:grid;grid-template-columns:2fr 1.4fr 1.4fr 1fr;gap:8px 10px;align-items:end;background:#f7f9fd;border:1px solid var(--line,#e3e8f1);border-radius:12px;padding:10px 12px;margin:8px 0}
 .cx-membro .cx-m-nome{grid-column:span 2}.cx-membro .cx-m-del{justify-self:end}
 @media(max-width:760px){.cx-membro{grid-template-columns:1fr 1fr}.cx-membro .cx-m-nome{grid-column:1/-1}}
+.cx-todo li.cx-todo-vencido b.cx-n{background:#fdeceb;color:#b3261e}
+.cx-todo li.cx-todo-vencido span{color:#8a2a20;font-weight:600}
+.cx-todo li.cx-todo-vence b.cx-n{background:#fff3d6;color:#8a5a00;min-width:38px}
+.cx-todo li.cx-todo-vazio b.cx-n{background:#eef2f8;color:#5b6b82}
+
+/* v51: fotos 3x4 e equipe */
+.cx-foto{position:relative;width:90px;flex-shrink:0}
+.cx-foto-box{width:90px;height:120px;border:2px dashed #c3d1ef;border-radius:10px;background:#f6f9ff;padding:0;cursor:pointer;overflow:hidden;display:grid;place-items:center;color:#5b6b82;font-size:12px;line-height:1.3;font-weight:700}
+.cx-foto-box img{width:100%;height:100%;object-fit:cover;display:block}
+.cx-foto-box:hover{border-color:#2f56b0}
+.cx-foto-x{position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:1px solid #f0c7c2;background:#fff;color:#b3261e;cursor:pointer;font-size:12px;line-height:1;padding:0}
+.cx-membro{grid-template-columns:auto 2fr 1.4fr 1.4fr 1fr!important}
+.cx-membro .cx-m-foto{grid-row:span 2;align-self:center}
+.cx-membro .cx-m-foto .cx-foto,.cx-membro .cx-m-foto .cx-foto-box{width:66px}.cx-membro .cx-m-foto .cx-foto-box{height:88px;font-size:11px}
+.cx-check{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;font-weight:600}
+.cx-check input{width:auto!important}
+.cx-equipe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:12px}
+.cx-pessoa{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line,#e3e8f1);border-radius:14px;padding:12px;background:#fff}
+.cx-pessoa.oculta{opacity:.7;background:#fafbfd}
+.cx-pessoa-foto{border:0;background:none;padding:0;cursor:pointer}
+.cx-pessoa b{display:block;line-height:1.25}.cx-pessoa span{display:block;color:#2f56b0;font-size:13.5px;font-weight:600}.cx-pessoa small{display:block;color:#5b6b82;font-size:12.5px}
+@media(max-width:760px){.cx-membro{grid-template-columns:auto 1fr 1fr!important}}
+.cx-transp-opts{display:grid;gap:8px;margin:12px 0 6px}

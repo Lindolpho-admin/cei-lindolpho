@@ -1,0 +1,23 @@
+// v49: maiúsculas automáticas (regras de nomes, frases, siglas, telefone e classificação de campos).
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import vm from 'node:vm';
+const win = {};
+vm.runInNewContext(await fs.readFile('dist/text-case.js', 'utf8'), {window: win, document: {addEventListener() {}}, CSS: {escape: s => s}});
+const {nameCase, sentenceCase, formatPhone} = win.cxTextCase;
+const typed = (fn, text) => { let v = ''; for (const c of text) v = fn(v + c); return fn(v, true); };
+assert.equal(typed(nameCase, 'maria da silva e joão dos santos'), 'Maria da Silva e João dos Santos');
+assert.equal(typed(nameCase, 'sala de reuniões do cei lindolpho'), 'Sala de Reuniões do CEI Lindolpho');
+assert.equal(nameCase('Turma A', true), 'Turma A', 'letra de turma continua maiúscula');
+assert.equal(nameCase('Reunião da APP com a SEMED', true), 'Reunião da APP com a SEMED', 'não rebaixa siglas em texto misto');
+assert.equal(nameCase('MARIA DA SILVA DO CEI', true), 'Maria da Silva do CEI', 'caps lock é padronizado na saída');
+assert.equal(nameCase('MARIA DA', false), 'MARIA DA', 'enquanto digita, não mexe no caps lock');
+assert.equal(win.normalizeText('  CEI ANDREIA alexandra '), 'CEI ANDREIA Alexandra');
+assert.equal(win.normalizeText('reunião do pdde. pauta aprovada', 'multiline'), 'Reunião do PDDE. Pauta aprovada');
+assert.equal(nameCase('PDDE Qualidade', true), 'PDDE Qualidade');
+assert.equal(typed(sentenceCase, 'planejamento do pdde. festa junina! revisão do ppp\nreunião com a app'), 'Planejamento do PDDE. Festa junina! Revisão do PPP\nReunião com a APP');
+assert.equal(sentenceCase('ver www.site.com.br e o e-mail x@y.org', true), 'Ver www.site.com.br e o e-mail x@y.org', 'não mexe em endereços');
+assert.equal(formatPhone('47999112233'), '(47) 99911-2233');
+assert.equal(formatPhone('4734522185'), '(47) 3452-2185');
+for (const v of ['maria', 'Planejamento. teste']) assert.equal(nameCase(v).length, v.length, 'tamanho preservado (cursor não pula)');
+console.log('PASS: maiúsculas automáticas (nomes com preposições, siglas da escola, frases, sem rebaixar maiúsculas, telefone).');
