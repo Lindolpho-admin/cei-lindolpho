@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '52';
+const CX_VERSION = '53';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -849,7 +849,7 @@ async function cxRenderColegiado(a) {
   if (orgao === 'app') Promise.all([cxLoad(true), cxLoadTransp()]).then(([, t]) => {
     const el = document.getElementById('cxAppContas'); if (!el) return;
     const ano = String(new Date().getFullYear()), acc = cxFinance(ano).accounts.find(x => x.account === 'SICOOB');
-    el.innerHTML = `<div class="panel"><div class="cx-head"><div><h2>Prestação de contas da APP · ${ano}</h2><p>Resumo da conta Sicoob (recursos próprios), a partir dos lançamentos do Financeiro.</p></div><div class="cx-btns"><button class="cx-btn" onclick="cx.finAccount='SICOOB';cxGo('financeiro')">Abrir lançamentos</button></div></div>
+    el.innerHTML = `<div class="panel"><div class="cx-head"><div><h2>Prestação de contas da APP · ${ano}</h2><p>Resumo da conta Sicoob (recursos próprios), a partir dos lançamentos do Financeiro.</p></div><div class="cx-btns"><button class="cx-btn" onclick="cxAbrirConta('SICOOB')">Abrir lançamentos</button></div></div>
       <div class="cx-stats" style="margin-top:12px"><div class="cx-stat"><small>Saldo inicial</small><b>${cxMoney(acc.initial)}</b></div><div class="cx-stat"><small>Entradas</small><b>${cxMoney(acc.inflow)}</b></div><div class="cx-stat"><small>Saídas</small><b>${cxMoney(acc.outflow)}</b></div><div class="cx-stat"><small>Saldo</small><b>${cxMoney(acc.balance)}</b></div></div></div>` + cxTranspPanel(t, 'SICOOB');
   }).catch(() => {});
   cxLoad().then(() => { const el = document.getElementById('cxColDocs'); if (!el) return; const items = cxAllItems().filter(x => x.area === orgao).sort((x, y) => String(y.date).localeCompare(String(x.date))).slice(0, 8);
@@ -857,7 +857,7 @@ async function cxRenderColegiado(a) {
 }
 function cxMembroRow(m = {}, O) {
   return `<div class="cx-membro"><div class="cx-m-foto">${cxFotoPicker(m.foto, 'data-m="foto"')}</div>
-    <label class="cx-m-nome">Nome<input data-m="nome" list="cxEquipeNomes" value=""${cxEsc(m.nome || '')}" maxlength="120"></label>
+    <label class="cx-m-nome">Nome<input data-m="nome" list="cxEquipeNomes" value="${cxEsc(m.nome || '')}" maxlength="120"></label>
     <label>Cargo / função<input data-m="cargo" list="cxCargos" value="${cxEsc(m.cargo || '')}" maxlength="80"></label>
     <label>Segmento<input data-m="segmento" list="cxSegmentos" value="${cxEsc(m.segmento || '')}" maxlength="60"></label>
     <label>Condição<select data-m="condicao"><option value="titular">Titular</option><option value="suplente" ${m.condicao === 'suplente' ? 'selected' : ''}>Suplente</option></select></label>
@@ -878,13 +878,19 @@ window.cxChapaForm = async (orgao, id, copy = false) => {
       <label class="full cx-check"><input type="checkbox" name="publico" ${c.publico === false ? '' : 'checked'}> Mostrar esta composição na página pública (somente nome, cargo, segmento e foto — nunca telefone ou e-mail)</label>
       <label class="full">Ata de eleição / posse (referência)<input name="ata" maxlength="160" value="${cxEsc(c.ata || '')}" placeholder="Ex.: Ata nº 02/2026, de 15/03/2026"></label>
       <div class="full"><b>Membros</b><p class="hint" style="margin:2px 0 4px">Linhas sem nome são ignoradas. Telefone e e-mail ficam só na área restrita. Clique no quadro 3x4 para pôr a foto; se a pessoa já tem foto na Equipe da instituição, ela é usada automaticamente.</p><div id="cxMembros">${(c.membros?.length ? c.membros : [{}]).map(m => cxMembroRow(m, O)).join('')}</div>
-        <button type="button" class="cx-btn small" style="margin-top:8px" onclick="document.getElementById('cxMembros').insertAdjacentHTML('beforeend', cxMembroRow({}, CX_ORGAOS['${orgao}']))">+ Adicionar membro</button></div>
+        <button type="button" class="cx-btn small" style="margin-top:8px" onclick="cxAddMembro()">+ Adicionar membro</button></div>
       <label class="full">Observações<textarea name="observacoes" rows="2" maxlength="1500">${cxEsc(c.observacoes || '')}</textarea></label>
       <datalist id="cxEquipeNomes">${(cx.equipe || []).map(e => `<option value="${cxEsc(e.nome)}">`).join('')}</datalist><datalist id="cxCargos">${O.cargos.map(x => `<option value="${cxEsc(x)}">`).join('')}</datalist><datalist id="cxSegmentos">${O.segmentos.map(x => `<option value="${cxEsc(x)}">`).join('')}</datalist>
       <p class="hint full" id="cxChapaErr" style="color:#b3261e" hidden></p>
       <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar</button></div></form>`);
 };
 window.cxMembroRow = cxMembroRow;
+// Corrigido na v53: o botão chamava CX_ORGAOS direto do HTML, nome que não é global; agora a função é exposta.
+window.cxAddMembro = () => {
+  const box = document.getElementById('cxMembros'); if (!box) return;
+  box.insertAdjacentHTML('beforeend', cxMembroRow({}));
+  const rows = box.querySelectorAll('.cx-membro'); rows[rows.length - 1].querySelector('[data-m="nome"]')?.focus();
+};
 window.cxChapaSave = async (orgao, id) => {
   const f = document.getElementById('cxChapaF'), err = document.getElementById('cxChapaErr');
   const membros = [...f.querySelectorAll('.cx-membro')].map(row => Object.fromEntries([...row.querySelectorAll('[data-m]')].map(i => [i.dataset.m, i.value.trim()])));
@@ -1062,6 +1068,7 @@ function cxTranspPanel(t, soConta) {
     <label class="cx-check"><input type="checkbox" data-detalhar ${t.detalhar !== false ? 'checked' : ''} onchange="cxTranspSave(this)"> Mostrar cada lançamento (data, descrição, fornecedor, categoria e valor)</label></div>
     <p class="hint">Antes de publicar, confira se as descrições dos lançamentos não têm dados pessoais (por exemplo, nome de família que contribuiu ou CPF).</p></div>`;
 }
+window.cxAbrirConta = conta => { cx.finAccount = conta; cxGo('financeiro'); };
 window.cxTranspSave = async el => {
   const t = await cxLoadTransp(), contas = new Set(t.contas);
   if (el.dataset.conta) { el.checked ? contas.add(el.dataset.conta) : contas.delete(el.dataset.conta); }

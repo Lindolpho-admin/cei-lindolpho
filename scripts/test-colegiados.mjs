@@ -51,3 +51,10 @@ await json('/api/portal/colegiados', admin, 'POST', {orgao: 'app', id: all.app[0
 assert.equal((await json('/api/portal/colegiados', admin)).app.length, 0);
 await fs.rm(dir, {recursive: true, force: true});
 console.log('PASS: composição da APP e do Conselho (cadastro, edição com mesmo id, órgãos separados, validações de datas/e-mail/membros, só administração, contatos fora da página pública e do espaço docente, preservada ao salvar a base, exclusão).');
+// v53: regressões das telas (nome dos membros vazio ao editar; botão "+ Adicionar membro" sem efeito).
+const front = await fs.readFile('dist/central.js', 'utf8');
+assert.ok(!/=""\$\{/.test(front), 'atributo HTML com aspas duplicadas (value=""${…}")');
+assert.match(front, /<input data-m="nome" list="cxEquipeNomes" value="\$\{cxEsc\(m\.nome \|\| ''\)\}"/);
+assert.ok(!/onclick="[^"]*CX_ORGAOS/.test(front), 'botão não pode depender de constante interna');
+assert.match(front, /window\.cxAddMembro = /);
+console.log('PASS: regressões v53 (nome carregado na edição, botão adicionar membro).');
