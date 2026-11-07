@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '55';
+const CX_VERSION = '57';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -197,7 +197,7 @@ function cxBuildNav() {
   frag.append(group('Colegiados'), make('colegiado', '◇ Conselho Escolar', {orgao: 'conselho'}), make('colegiado', '◉ APP', {orgao: 'app'}));
   frag.append(group('Secretaria'), make('equipe', '👥 Equipe da instituição'), make('enturmacao', '🎂 Ver enturmação'));
   if (esp) frag.append(esp); if (bib) frag.append(bib); if (solic) frag.append(solic);
-  frag.append(group('Sistema'), make('publica', '🌐 Página pública'));
+  frag.append(group('Sistema'), make('relatorios', '📊 Relatórios'), make('publica', '🌐 Página pública'));
   if (acessos) frag.append(acessos); if (seg) frag.append(seg);
   hidden.forEach(b => frag.append(b));
   nav.innerHTML = ''; nav.append(frag);
@@ -244,6 +244,7 @@ render = function () {
   if (state.view === 'enturmacao') { setHead('enturmacao'); cxMarkActive(); return cxRenderEnturmacao(a); }
   if (CX_ADMIN && state.view === 'atas') { setHead('atas'); cxMarkActive(); return cxRenderAtas(a); }
   if (CX_ADMIN && state.view === 'publica') { setHead('publica'); cxMarkActive(); return cxRenderPublic(a); }
+  if (CX_ADMIN && state.view === 'relatorios') { document.getElementById('title').textContent = 'Relatórios'; document.getElementById('subtitle').textContent = 'Listas prontas para consulta rápida, impressão (com o logotipo do CEI) ou planilha'; cxMarkActive(); return cxRenderRelatorios(a); }
   if (CX_ADMIN && state.view === 'equipe') { document.getElementById('title').textContent = 'Equipe da instituição'; document.getElementById('subtitle').textContent = 'Gestão, professores, administrativo e apoio — com foto para a página pública'; cxMarkActive(); return cxRenderEquipe(a); }
   if (CX_ADMIN && state.view === 'colegiado') { const o = CX_ORGAOS[cx.orgao] || CX_ORGAOS.conselho; document.getElementById('title').textContent = o.titulo; document.getElementById('subtitle').textContent = 'Composição atual, mandatos anteriores e documentos'; cxMarkActive(); return cxRenderColegiado(a); }
   if (CX_ADMIN && state.view === 'financeiro') { setHead('financeiro'); cxMarkActive(); return cxRenderFinance(a); }
@@ -1077,6 +1078,209 @@ window.cxTranspSave = async el => {
   catch (e) { el.checked = !el.checked; notify(e.message); }
 };
 { const draw = cxDrawFinance; cxDrawFinance = function (a) { draw(a); cxLoadTransp().then(t => { if (state.view === 'financeiro' && !a.querySelector('.cx-transp')) a.insertAdjacentHTML('beforeend', cxTranspPanel(t)); }).catch(() => {}); }; }
+
+/* ---------- Relatórios (v56) ----------
+   Cada relatório devolve {titulo, meta, colunas, linhas, resumo, paisagem, pessoal}.
+   Saídas: prévia na tela, impressão no papel timbrado (cabeçalho e rodapé repetem em cada página) e planilha CSV. */
+const cxR = {sel: 'conselho', opts: {}};
+const cxAnoAtual = () => cxToday().slice(0, 4);
+const cxAnosFin = () => { const s = new Set([cxAnoAtual()]); (cx.records || []).forEach(r => { if (r.fin && r.date) s.add(String(r.date).slice(0, 4)); }); return [...s].sort().reverse(); };
+const cxEqCat = k => (CX_EQ_CATS.find(c => c[0] === k) || [, ''])[1].replace(/ \(.*\)$/, '');
+function cxColegReport(orgao, o) {
+  const all = (cx.colegiados || {})[orgao] || [], h = cxToday(), O = CX_ORGAOS[orgao];
+  const lista = o.quais === 'todas' ? [...all].sort((a, b) => b.inicio.localeCompare(a.inicio)) : all.filter(c => c.inicio <= h && c.fim >= h);
+  const linhas = [];
+  for (const c of lista) for (const m of [...c.membros].sort((a, b) => (a.condicao === 'suplente') - (b.condicao === 'suplente')))
+    linhas.push({gestao: c.nome, mandato: `${cxBR(c.inicio)} a ${cxBR(c.fim)}`, nome: m.nome, cargo: m.cargo, segmento: m.segmento, condicao: m.condicao === 'suplente' ? 'Suplente' : 'Titular', telefone: m.telefone, email: m.email});
+  const cols = [...(lista.length > 1 ? [['gestao', 'Gestão'], ['mandato', 'Mandato']] : []), ['nome', 'Nome'], ['cargo', 'Cargo / função'], ['segmento', 'Segmento'], ['condicao', 'Condição'], ...(o.contatos !== false ? [['telefone', 'Telefone'], ['email', 'E-mail']] : [])];
+  return {titulo: orgao === 'app' ? 'Composição da APP — Associação de Pais e Professores' : 'Composição do Conselho Escolar', colunas: cols, linhas, pessoal: o.contatos !== false,
+    meta: lista.length === 1 ? [['Gestão', lista[0].nome], ['Mandato', `${cxBR(lista[0].inicio)} a ${cxBR(lista[0].fim)}`], ...(lista[0].ata ? [['Eleição / posse', lista[0].ata]] : [])] : [['Composições', o.quais === 'todas' ? 'Todas (histórico)' : 'Vigentes hoje']],
+    vazio: o.quais === 'todas' ? 'Nenhuma composição cadastrada.' : `Nenhuma composição vigente hoje. Cadastre em ${O.titulo} ou escolha “Todas (histórico)”.`};
+}
+const CX_RELATORIOS = [
+  {grupo: 'Colegiados', id: 'conselho', titulo: 'Composição do Conselho Escolar', desc: 'Membros, cargos, segmentos e contatos.', icone: '◇', load: ['colegiados'],
+    opcoes: [['quais', 'Composições', [['vigente', 'Vigente hoje'], ['todas', 'Todas (histórico)']]], ['contatos', 'Contatos', [['sim', 'Com telefone e e-mail'], ['nao', 'Sem contatos']]]],
+    gerar: o => cxColegReport('conselho', {...o, contatos: o.contatos !== 'nao'})},
+  {grupo: 'Colegiados', id: 'app', titulo: 'Diretoria da APP', desc: 'Membros da chapa, cargos e contatos.', icone: '◉', load: ['colegiados'],
+    opcoes: [['quais', 'Composições', [['vigente', 'Vigente hoje'], ['todas', 'Todas (histórico)']]], ['contatos', 'Contatos', [['sim', 'Com telefone e e-mail'], ['nao', 'Sem contatos']]]],
+    gerar: o => cxColegReport('app', {...o, contatos: o.contatos !== 'nao'})},
+  {grupo: 'Colegiados', id: 'mandatos', titulo: 'Mandatos da APP e do Conselho', desc: 'Todas as gestões, com período e situação.', icone: '🗓', load: ['colegiados'], opcoes: [],
+    gerar: () => { const linhas = []; for (const o of ['conselho', 'app']) for (const c of (cx.colegiados || {})[o] || []) linhas.push({orgao: o === 'app' ? 'APP' : 'Conselho Escolar', gestao: c.nome, inicio: cxBR(c.inicio), fim: cxBR(c.fim), situacao: cxSituacao(c).label, membros: c.membros.length, ata: c.ata, _ord: o + c.inicio});
+      linhas.sort((a, b) => b._ord.localeCompare(a._ord));
+      return {titulo: 'Mandatos da APP e do Conselho Escolar', colunas: [['orgao', 'Órgão'], ['gestao', 'Gestão'], ['inicio', 'Início'], ['fim', 'Fim'], ['situacao', 'Situação'], ['membros', 'Membros', 'num'], ['ata', 'Eleição / posse']], linhas, vazio: 'Nenhuma composição cadastrada.'}; }},
+  {grupo: 'Pessoas', id: 'equipe', titulo: 'Equipe da instituição', desc: 'Quem trabalha no CEI, por grupo, com função e vínculo.', icone: '👥', load: ['equipe'],
+    opcoes: [['grupo', 'Grupo', [['', 'Todos'], ...CX_EQ_CATS.map(([k]) => [k, cxEqCat(k)])]], ['contatos', 'Contatos', [['sim', 'Com telefone e e-mail'], ['nao', 'Sem contatos']]]],
+    gerar: o => { const ord = Object.fromEntries(CX_EQ_CATS.map(([k], i) => [k, i]));
+      const linhas = (cx.equipe || []).filter(e => !o.grupo || e.categoria === o.grupo).sort((a, b) => (ord[a.categoria] - ord[b.categoria]) || cxCol.compare(a.nome, b.nome)).map(e => ({grupo: cxEqCat(e.categoria), nome: e.nome, funcao: e.funcao, vinculo: e.vinculo, atuacao: e.atuacao, telefone: e.telefone, email: e.email}));
+      const por = CX_EQ_CATS.map(([k]) => [cxEqCat(k), (cx.equipe || []).filter(e => e.categoria === k && (!o.grupo || k === o.grupo)).length]).filter(([, n]) => n);
+      return {titulo: 'Equipe da instituição', colunas: [['grupo', 'Grupo'], ['nome', 'Nome'], ['funcao', 'Função'], ['vinculo', 'Vínculo'], ['atuacao', 'Atuação'], ...(o.contatos !== 'nao' ? [['telefone', 'Telefone'], ['email', 'E-mail']] : [])], linhas, pessoal: o.contatos !== 'nao', paisagem: o.contatos !== 'nao',
+        resumo: por.map(([g, n]) => `${g}: ${n}`).join(' · '), vazio: 'Nenhuma pessoa cadastrada em Equipe da instituição.'}; }},
+  {grupo: 'Pessoas', id: 'contatos', titulo: 'Agenda de contatos', desc: 'Equipe, Conselho e APP numa lista só, para ligar ou mandar mensagem.', icone: '📇', load: ['equipe', 'colegiados'], opcoes: [],
+    gerar: () => { const m = new Map(), h = cxToday(), add = (nome, papel, tel, email) => { const k = cxNomeKey(nome); const x = m.get(k) || {nome, papeis: [], telefone: '', email: ''}; x.papeis.push(papel); x.telefone ||= tel || ''; x.email ||= email || ''; m.set(k, x); };
+      for (const e of cx.equipe || []) add(e.nome, e.funcao, e.telefone, e.email);
+      for (const o of ['conselho', 'app']) for (const c of ((cx.colegiados || {})[o] || []).filter(c => c.inicio <= h && c.fim >= h)) for (const mb of c.membros) add(mb.nome, `${o === 'app' ? 'APP' : 'Conselho'}: ${mb.cargo || 'membro'}`, mb.telefone, mb.email);
+      const linhas = [...m.values()].sort((a, b) => cxCol.compare(a.nome, b.nome)).map(x => ({nome: x.nome, papel: x.papeis.join('; '), telefone: x.telefone, email: x.email}));
+      return {titulo: 'Agenda de contatos', colunas: [['nome', 'Nome'], ['papel', 'Função / participação'], ['telefone', 'Telefone'], ['email', 'E-mail']], linhas, pessoal: true, resumo: `${linhas.filter(l => l.telefone).length} com telefone · ${linhas.filter(l => l.email).length} com e-mail`, vazio: 'Nenhum contato cadastrado.'}; }},
+  {grupo: 'Biblioteca', id: 'acervo', titulo: 'Acervo da biblioteca', desc: 'Lista de livros com autor, editora, Cutter e exemplares.', icone: '📚', load: [],
+    opcoes: [['ordem', 'Ordenar por', [['titulo', 'Título'], ['autor', 'Autor'], ['cutter', 'Cutter']]], ['situacao', 'Mostrar', [['', 'Todos os livros'], ['disponivel', 'Com exemplar disponível'], ['emprestado', 'Com exemplar emprestado']]]],
+    gerar: o => { let l = (state.books || []).map(b => { const tot = bookCopies(b), emp = activeBookLoans(b.id).length; return {titulo: b.title, autor: b.author || (b.authors || []).join('; '), editora: b.publisher, ano: b.year, cutter: b.cutter, exemplares: tot, emprestados: emp, disponiveis: Math.max(0, tot - emp)}; });
+      if (o.situacao === 'disponivel') l = l.filter(x => x.disponiveis > 0); if (o.situacao === 'emprestado') l = l.filter(x => x.emprestados > 0);
+      const k = o.ordem || 'titulo'; l.sort((a, b) => cxCol.compare(String(a[k] || '').replace(/^[^\p{L}\p{N}]+/u, ''), String(b[k] || '').replace(/^[^\p{L}\p{N}]+/u, '')) || cxCol.compare(a.titulo || '', b.titulo || ''));
+      return {titulo: 'Acervo da biblioteca', paisagem: true, colunas: [['titulo', 'Título'], ['autor', 'Autor(es)'], ['editora', 'Editora'], ['ano', 'Ano'], ['cutter', 'Cutter'], ['exemplares', 'Exempl.', 'num'], ['emprestados', 'Emprest.', 'num'], ['disponiveis', 'Disp.', 'num']], linhas: l,
+        resumo: `${l.length} título(s) · ${l.reduce((s, x) => s + x.exemplares, 0)} exemplar(es) · ${l.reduce((s, x) => s + x.emprestados, 0)} emprestado(s)`, vazio: 'Nenhum livro cadastrado.'}; }},
+  {grupo: 'Biblioteca', id: 'emprestimos', titulo: 'Empréstimos em aberto', desc: 'Quem está com cada livro e a data de devolução; atrasados primeiro.', icone: '🔖', load: [],
+    opcoes: [['filtro', 'Mostrar', [['', 'Todos em aberto'], ['atrasados', 'Só atrasados']]]],
+    gerar: o => { const h = libraryToday(); let l = (state.loans || []).filter(x => !x.returned).map(x => ({atraso: x.due < h, livro: x.bookTitle, cutter: x.bookCutter, exemplar: x.copyNumber || '', pessoa: x.person, turma: x.turma, saida: cxBR(x.date), devolucao: cxBR(x.due), situacao: x.due < h ? `Atrasado (${Math.round((new Date(h) - new Date(x.due)) / 86400000)} dias)` : 'No prazo', _d: x.due}));
+      if (o.filtro === 'atrasados') l = l.filter(x => x.atraso); l.sort((a, b) => (b.atraso - a.atraso) || a._d.localeCompare(b._d));
+      return {titulo: 'Empréstimos em aberto', paisagem: true, colunas: [['livro', 'Livro'], ['cutter', 'Cutter'], ['exemplar', 'Ex.', 'num'], ['pessoa', 'Com quem está'], ['turma', 'Turma'], ['saida', 'Saída'], ['devolucao', 'Devolução'], ['situacao', 'Situação']], linhas: l, pessoal: true,
+        resumo: `${l.length} empréstimo(s) · ${l.filter(x => x.atraso).length} atrasado(s)`, vazio: 'Nenhum empréstimo em aberto.'}; }},
+  {grupo: 'Biblioteca', id: 'leitores', titulo: 'Leitores cadastrados', desc: 'Pessoas que podem pegar livros emprestados.', icone: '🪪', load: [],
+    opcoes: [['ativos', 'Mostrar', [['sim', 'Só ativos'], ['', 'Todos']]]],
+    gerar: o => { const l = (state.readers || []).filter(r => o.ativos === '' || r.active !== false).sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR')).map(r => ({nome: r.name, categoria: r.category, turma: r.turma, identificacao: r.identifier, abertos: (state.loans || []).filter(x => !x.returned && x.readerId === r.id).length, situacao: r.active === false ? 'Inativo' : 'Ativo'}));
+      return {titulo: 'Leitores cadastrados', colunas: [['nome', 'Nome'], ['categoria', 'Categoria'], ['turma', 'Turma'], ['identificacao', 'Identificação'], ['abertos', 'Livros em aberto', 'num'], ['situacao', 'Situação']], linhas: l, pessoal: true, vazio: 'Nenhum leitor cadastrado.'}; }},
+  {grupo: 'Secretaria', id: 'espera', titulo: 'Lista de espera / vagas', desc: 'Vagas recebidas, situação do contato e turma.', icone: '🧒', load: [],
+    opcoes: [['status', 'Situação', () => [['', 'Todas'], ['abertas', 'Em andamento'], ...['recebida', 'aceitou', 'rejeitou', 'sem_resposta', 'telefone_inativo', 'matriculou', 'retirou_encaminhamento', 'outro_local'].map(x => [x, waitStatusLabel(x)])]]],
+    gerar: o => { const fim = ['matriculou', 'rejeitou', 'retirou_encaminhamento', 'outro_local'];
+      const l = (state.waitlist || []).filter(w => !o.status || (o.status === 'abertas' ? !fim.includes(w.status) : w.status === o.status)).sort((a, b) => String(a.recebimento).localeCompare(String(b.recebimento))).map(w => ({crianca: w.crianca, nascimento: cxBR(w.nascimento), turma: w.turma, destino: w.destino, responsavel: w.responsavel, telefone: w.telefone, recebimento: cxBR(w.recebimento), situacao: waitStatusLabel(w.status)}));
+      return {titulo: 'Lista de espera e vagas', paisagem: true, colunas: [['crianca', 'Criança'], ['nascimento', 'Nascimento'], ['turma', 'Turma'], ['destino', 'Destino'], ['responsavel', 'Responsável'], ['telefone', 'Telefone'], ['recebimento', 'Recebida em'], ['situacao', 'Situação']], linhas: l, pessoal: true, vazio: 'Nenhuma vaga com esse filtro.'}; }},
+  {grupo: 'Secretaria', id: 'oficios', titulo: 'Ofícios expedidos', desc: 'Número, data, destinatário e assunto.', icone: '✉', load: [],
+    opcoes: [['ano', 'Ano', () => [['', 'Todos'], ...[...new Set((state.oficios || []).map(x => String(x.ano || String(x.data || '').slice(0, 4))).filter(Boolean))].sort().reverse().map(a => [a, a])]]],
+    gerar: o => { const l = (state.oficios || []).filter(x => !o.ano || String(x.ano || String(x.data).slice(0, 4)) === o.ano).sort((a, b) => String(a.data).localeCompare(String(b.data))).map(x => ({numero: `${x.numero}/${x.ano || String(x.data).slice(0, 4)}`, data: cxBR(x.data), destinatario: x.destinatario, assunto: x.assunto}));
+      return {titulo: 'Ofícios expedidos', meta: o.ano ? [['Ano', o.ano]] : [], colunas: [['numero', 'Nº'], ['data', 'Data'], ['destinatario', 'Destinatário'], ['assunto', 'Assunto']], linhas: l, vazio: 'Nenhum ofício registrado.'}; }},
+  {grupo: 'Arquivo e finanças', id: 'arquivo', titulo: 'Índice do Arquivo central', desc: 'Documentos e atas guardados, por pasta e ano.', icone: '🗂', load: ['records'],
+    opcoes: [['area', 'Pasta', () => [['', 'Todas'], ...Object.entries(CX_AREAS).map(([k, v]) => [k, v.label])]], ['ano', 'Ano', () => [['', 'Todos'], ...[...new Set(cxAllItems().map(x => String(x.date || '').slice(0, 4)).filter(Boolean))].sort().reverse().map(a => [a, a])]]],
+    gerar: o => { const l = cxAllItems().filter(x => (!o.area || x.area === o.area) && (!o.ano || String(x.date || '').startsWith(o.ano))).sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).map(x => ({data: cxBR(x.date), titulo: x.title, tipo: x.r ? cxKindLabel(x.r) : (CX_GEN_KIND[x.gen] || 'Documento emitido'), pasta: CX_AREAS[x.area]?.label || '', processo: x.processo}));
+      return {titulo: 'Índice do Arquivo central', meta: [['Pasta', o.area ? CX_AREAS[o.area]?.label : 'Todas'], ['Ano', o.ano || 'Todos']], colunas: [['data', 'Data'], ['titulo', 'Documento'], ['tipo', 'Tipo'], ['pasta', 'Pasta'], ['processo', 'Processo / assunto']], linhas: l, paisagem: true, vazio: 'Nenhum documento com esse filtro.'}; }},
+  {grupo: 'Arquivo e finanças', id: 'saldos', titulo: 'Saldo das contas', desc: 'Saldo de cada conta, custeio/capital, conferência com o extrato ou evolução mês a mês.', icone: '🏦', load: ['records'],
+    opcoes: [['ano', 'Ano', () => cxAnosFin().map(a => [a, a])], ['modo', 'Mostrar', [['contas', 'Por conta'], ['mensal', 'Mês a mês']]], ['conta', 'Conta (mês a mês)', [['', 'Todas somadas'], ...Object.entries(CX_ACCOUNTS).map(([k, v]) => [k, v.label])]]],
+    gerar: o => { const ano = o.ano || cxAnoAtual(), {accounts} = cxFinance(ano), M = v => cxMoney(v);
+      if (o.modo === 'mensal') {
+        const accs = accounts.filter(x => !o.conta || x.account === o.conta), list = accs.flatMap(x => x.list);
+        const ini = accs.reduce((s, x) => s + x.initial, 0); let saldo = ini; const linhas = [];
+        const ate = ano === cxAnoAtual() ? Number(cxToday().slice(5, 7)) : 12;
+        for (let m = 1; m <= ate; m++) { const mm = String(m).padStart(2, '0'), l = list.filter(r => String(r.date).slice(5, 7) === mm);
+          const ent = l.filter(r => r.fin.move === 'entrada').reduce((s, r) => s + r.fin.amount, 0), sai = l.filter(r => r.fin.move === 'saida').reduce((s, r) => s + r.fin.amount, 0);
+          const anterior = saldo; saldo += ent - sai;
+          const ex = l.filter(r => r.fin.move === 'saldo_extrato').sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+          linhas.push({mes: cxMonthName(mm).replace(/^./, c => c.toUpperCase()), anterior: M(anterior), entradas: ent ? M(ent) : '', saidas: sai ? M(sai) : '', saldo: M(saldo), extrato: ex && o.conta ? `${M(ex.fin.amount)} (${cxBR(ex.date)})` : ''}); }
+        return {titulo: 'Saldo das contas — mês a mês', meta: [['Ano', ano], ['Conta', o.conta ? CX_ACCOUNTS[o.conta].label : 'Todas somadas']],
+          colunas: [['mes', 'Mês'], ['anterior', 'Saldo anterior', 'num'], ['entradas', 'Entradas', 'num'], ['saidas', 'Saídas', 'num'], ['saldo', 'Saldo no fim do mês', 'num'], ['extrato', 'Extrato informado', 'num']], linhas,
+          resumo: `Saldo inicial do ano: ${M(ini)}\nSaldo atual: ${M(saldo)}`, vazio: 'Sem meses para mostrar.'}; }
+      const ativos = accounts.filter(x => x.count);
+      const linhas = ativos.map(x => { const nat = CX_ACCOUNTS[x.account].natures, r = x.recon;
+        return {conta: CX_ACCOUNTS[x.account].label, inicial: M(x.initial), entradas: M(x.inflow), saidas: M(x.outflow), saldo: M(x.balance), custeio: nat ? M(x.nat.custeio) : '', capital: nat ? M(x.nat.capital) : '',
+          extrato: r ? `${M(r.bank)} em ${cxBR(r.date)}` : 'Sem extrato', conferencia: !r ? '—' : r.diff === 0 ? 'Confere ✓' : `Diferença de ${M(Math.abs(r.diff))} (${r.diff > 0 ? 'sistema maior' : 'extrato maior'})`, atraso: !!(r && r.diff !== 0)}; });
+      const tot = k => ativos.reduce((s, x) => s + x[k], 0);
+      if (ativos.length > 1) linhas.push({total: true, conta: 'TOTAL', inicial: M(tot('initial')), entradas: M(tot('inflow')), saidas: M(tot('outflow')), saldo: M(tot('balance')), custeio: '', capital: '', extrato: '', conferencia: ''});
+      const dif = ativos.filter(x => x.recon && x.recon.diff !== 0).length;
+      return {titulo: 'Saldo das contas', meta: [['Ano', ano], ['Posição em', cxBR(cxToday())]], paisagem: true,
+        colunas: [['conta', 'Conta'], ['inicial', 'Saldo inicial', 'num'], ['entradas', 'Entradas', 'num'], ['saidas', 'Saídas', 'num'], ['saldo', 'Saldo', 'num'], ['custeio', 'Saldo custeio', 'num'], ['capital', 'Saldo capital', 'num'], ['extrato', 'Último extrato', 'num'], ['conferencia', 'Conferência']], linhas,
+        resumo: `${ativos.length} conta(s) com movimento${dif ? `\n${dif} conta(s) com diferença entre o sistema e o extrato (em vermelho)` : ''}`, vazio: `Nenhum lançamento financeiro em ${ano}.`}; }},
+  {grupo: 'Arquivo e finanças', id: 'financeiro', titulo: 'Lançamentos financeiros', desc: 'Entradas e despesas do ano por conta, com saldo.', icone: '💰', load: ['records'],
+    opcoes: [['ano', 'Ano', () => cxAnosFin().map(a => [a, a])], ['conta', 'Conta', [['', 'Todas'], ...Object.entries(CX_ACCOUNTS).map(([k, v]) => [k, v.label])]]],
+    gerar: o => { const ano = o.ano || cxAnoAtual(), fin = cxFinance(ano);
+      const l = (cx.records || []).filter(r => r.fin && String(r.date || '').startsWith(ano) && (!o.conta || r.fin.account === o.conta) && r.fin.move !== 'saldo_extrato').sort((a, b) => String(a.date).localeCompare(String(b.date))).map(r => ({data: cxBR(r.date), conta: CX_ACCOUNTS[r.fin.account]?.label, descricao: r.title, fornecedor: r.fin.supplier, documento: r.fin.docNumber, categoria: r.fin.category, natureza: CX_NATURES[r.fin.nature || ''] === 'Não se aplica' ? '' : CX_NATURES[r.fin.nature || ''], entrada: r.fin.move !== 'saida' ? cxMoney(r.fin.amount) : '', saida: r.fin.move === 'saida' ? cxMoney(r.fin.amount) : ''}));
+      const accs = fin.accounts.filter(x => !o.conta || x.account === o.conta).filter(x => x.initial || x.inflow || x.outflow);
+      return {titulo: 'Lançamentos financeiros', paisagem: true, meta: [['Ano', ano], ['Conta', o.conta ? CX_ACCOUNTS[o.conta].label : 'Todas']], colunas: [['data', 'Data'], ...(o.conta ? [] : [['conta', 'Conta']]), ['descricao', 'Descrição'], ['fornecedor', 'Fornecedor / origem'], ['documento', 'Doc.'], ['categoria', 'Categoria'], ['natureza', 'Natureza'], ['entrada', 'Entrada', 'num'], ['saida', 'Saída', 'num']], linhas: l,
+        resumo: accs.map(x => `${CX_ACCOUNTS[x.account].label}: saldo inicial ${cxMoney(x.initial)} + entradas ${cxMoney(x.inflow)} − saídas ${cxMoney(x.outflow)} = ${cxMoney(x.balance)}`).join('\n'), vazio: 'Nenhum lançamento nesse ano/conta.'}; }},
+];
+async function cxRelLoad(def) {
+  const need = def.load || [];
+  await Promise.all([need.includes('colegiados') && cxLoadColegiados(true), need.includes('equipe') && cxLoadEquipe(true), (need.includes('records') || def.opcoes.some(o => typeof o[2] === 'function')) && cxLoad(true)].filter(Boolean));
+}
+// Ordem alfabética que ignora pontuação e aspas no início (": a Bela…", "\"a Linha…\"").
+const cxCol = new Intl.Collator('pt-BR', {sensitivity: 'base', ignorePunctuation: true, numeric: true});
+// Colunas sem nenhum valor somem da tela e da impressão (a planilha mantém todas).
+const cxRelCols = r => r.colunas.filter(([k]) => r.linhas.some(l => cxRelCell(l[k]).trim()));
+const cxRelOpts = def => def.opcoes.map(([k, label, vals]) => { const list = typeof vals === 'function' ? vals() : vals; return [k, label, list]; });
+function cxRelCell(v) { return v === undefined || v === null ? '' : String(v); }
+async function cxRenderRelatorios(a) {
+  const def = CX_RELATORIOS.find(r => r.id === cxR.sel) || CX_RELATORIOS[0]; cxR.sel = def.id;
+  const grupos = [...new Set(CX_RELATORIOS.map(r => r.grupo))];
+  a.innerHTML = `<div class="cx-rel"><nav class="cx-rel-menu panel" style="margin-top:0" aria-label="Relatórios disponíveis">${grupos.map(g => `<h3>${cxEsc(g)}</h3>${CX_RELATORIOS.filter(r => r.grupo === g).map(r => `<button class="${r.id === def.id ? 'on' : ''}" onclick="cxRelSel('${r.id}')"><span aria-hidden="true">${r.icone}</span><span><b>${cxEsc(r.titulo)}</b><small>${cxEsc(r.desc)}</small></span></button>`).join('')}`).join('')}</nav>
+    <section class="cx-rel-main panel" style="margin-top:0" id="cxRelMain"><p class="muted">Carregando…</p></section></div>`;
+  try { await cxRelLoad(def); } catch (e) { document.getElementById('cxRelMain').innerHTML = `<div class="cx-empty">${cxEsc(e.message)}</div>`; return; }
+  if (state.view !== 'relatorios' || cxR.sel !== def.id) return;
+  const opts = cxR.opts[def.id] ||= {};
+  const campos = cxRelOpts(def);
+  for (const [k, , list] of campos) if (opts[k] === undefined || !list.some(([v]) => v === opts[k])) opts[k] = list[0]?.[0] ?? '';
+  const r = def.gerar(opts);
+  const max = 200, rows = r.linhas.slice(0, max), cols = cxRelCols(r), ocultas = r.colunas.length - cols.length;
+  document.getElementById('cxRelMain').innerHTML = `<div class="cx-head"><div><h2>${cxEsc(r.titulo)}</h2><p>${cxEsc(def.desc)}</p></div>
+      <div class="cx-btns"><button class="cx-btn primary" onclick="cxRelPrint()" ${r.linhas.length ? '' : 'disabled'}>🖨 Imprimir / PDF</button><button class="cx-btn" onclick="cxRelCsv()" ${r.linhas.length ? '' : 'disabled'}>⬇ Planilha (Excel)</button></div></div>
+    ${campos.length ? `<div class="cx-rel-opts">${campos.map(([k, label, list]) => `<label>${cxEsc(label)}<select onchange="cxRelOpt('${k}', this.value)">${list.map(([v, t]) => `<option value="${cxEsc(v)}" ${opts[k] === v ? 'selected' : ''}>${cxEsc(t)}</option>`).join('')}</select></label>`).join('')}</div>` : ''}
+    ${(r.meta || []).length ? `<p class="cx-rel-meta">${r.meta.map(([k, v]) => `<span><b>${cxEsc(k)}:</b> ${cxEsc(v)}</span>`).join('')}</p>` : ''}
+    ${r.pessoal ? '<p class="hint">⚠ Contém dados pessoais. Use só para a finalidade da escola e não compartilhe em grupos (LGPD).</p>' : ''}
+    ${r.linhas.length ? `<p class="cx-rel-count"><b>${r.linhas.filter(l => !l.total).length}</b> linha(s)${r.resumo ? ' · ' + cxEsc(r.resumo).replace(/\n/g, '<br>') : ''}</p>
+      <div class="cx-table-wrap"><table class="cx-table cx-rel-table"><thead><tr><th>#</th>${cols.map(([, t, al]) => `<th class="${al || ''}">${cxEsc(t)}</th>`).join('')}</tr></thead><tbody>${rows.map((l, i) => `<tr${l.atraso ? ' class="cx-rel-late"' : l.total ? ' class="cx-rel-total"' : ''}><td class="num">${l.total ? '' : i + 1}</td>${cols.map(([k, , al]) => `<td class="${al || ''}">${cxEsc(cxRelCell(l[k]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      ${ocultas ? `<p class="hint">${ocultas} coluna(s) sem nenhum dado preenchido não aparecem na tela nem na impressão; a planilha traz todas.</p>` : ''}
+      ${r.linhas.length > max ? `<p class="hint">Mostrando as primeiras ${max} linhas na tela. A impressão e a planilha trazem todas as ${r.linhas.length}.</p>` : ''}`
+    : `<div class="cx-empty" style="margin-top:12px">${cxEsc(r.vazio || 'Nada para mostrar.')}</div>`}`;
+  cxR.atual = r;
+}
+window.cxRelSel = id => { cxR.sel = id; render(); };
+window.cxRelOpt = (k, v) => { (cxR.opts[cxR.sel] ||= {})[k] = v; render(); };
+const cxRelArquivo = r => `${cxNomeKey(r.titulo).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${cxToday()}`;
+window.cxRelCsv = () => {
+  const r = cxR.atual; if (!r) return;
+  const q = v => { const t = cxRelCell(v).replace(/\r?\n/g, ' '); return /[";\n]/.test(t) || /^[=+\-@]/.test(t) ? '"' + (/^[=+\-@]/.test(t) ? "'" : '') + t.replace(/"/g, '""') + '"' : t; }; // evita fórmulas maliciosas no Excel
+  const linhas = [r.colunas.map(([, t]) => q(t)).join(';'), ...r.linhas.map(l => r.colunas.map(([k]) => q(l[k])).join(';'))];
+  const blob = new Blob(['﻿' + linhas.join('\r\n')], {type: 'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cxRelArquivo(r) + '.csv'; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  notify('Planilha baixada. Ela abre direto no Excel ou no Google Planilhas.');
+};
+// Layout próprio dos relatórios (v56): cores e logotipo do CEI, sem papel timbrado.
+window.cxRelPrint = async () => {
+  const r = cxR.atual; if (!r) return;
+  const w = window.open('', '_blank'); if (!w) { notify('Permita janelas pop-up para imprimir.'); return; }
+  let info = {}; try { info = (await cxRequest('/api/portal/public-settings')).info || {}; } catch {}
+  const origin = location.origin, agora = new Date(), hoje = agora.toLocaleDateString('pt-BR', {day: '2-digit', month: 'long', year: 'numeric'}), hora = agora.toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
+  const cols = cxRelCols(r), pais = !!r.paisagem;
+  const contato = [info.address, info.phone, info.email].filter(Boolean).map(cxEsc).join(' · ');
+  const giz = 'linear-gradient(90deg,#e0483b 0 16.6%,#3b8fd9 16.6% 33.3%,#3f9a4b 33.3% 50%,#8a4fd6 50% 66.6%,#f2c230 66.6% 83.3%,#f08a2c 83.3% 100%)';
+  const tabela = `<table class="dados"><thead><tr><th class="n">#</th>${cols.map(([, t, al]) => `<th class="${al || ''}">${cxEsc(t)}</th>`).join('')}</tr></thead><tbody>${r.linhas.map((l, i) => `<tr${l.atraso ? ' class="late"' : l.total ? ' class="total"' : ''}><td class="n">${l.total ? '' : i + 1}</td>${cols.map(([k, , al]) => `<td class="${al || ''}">${cxEsc(cxRelCell(l[k]))}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${cxEsc(cxRelArquivo(r))}</title><style>
+    @page{size:A4 ${pais ? 'landscape' : 'portrait'};margin:9mm 10mm}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{font:9.5pt/1.4 "Segoe UI",Arial,Helvetica,sans-serif;color:#1c2a44;margin:0}
+    table.pagina{width:100%;border-collapse:collapse}
+    .marca{display:flex;align-items:center;gap:12px;padding-bottom:7px}
+    .marca img{height:${pais ? '13mm' : '15mm'};width:auto;border-radius:8px}
+    .marca .nome{flex:1}.marca b{display:block;font:800 13pt "Trebuchet MS","Segoe UI",Arial,sans-serif;color:#1d3b82;letter-spacing:-.2px}
+    .marca small{display:block;color:#5b6b82;font-size:8.5pt}
+    .marca .tipo{text-align:right;color:#5b6b82;font-size:8pt;line-height:1.35}.marca .tipo b{font-size:9pt;color:#2f56b0;font-family:inherit;letter-spacing:.06em;text-transform:uppercase}
+    .giz{height:5px;border-radius:3px;background:${giz};margin-bottom:5mm}
+    .titulo{background:linear-gradient(135deg,#1d3b82,#2f56b0);color:#fff;border-radius:10px;padding:9px 14px;margin-bottom:4mm;display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+    .titulo h1{margin:0;font:800 14pt "Trebuchet MS","Segoe UI",Arial,sans-serif}
+    .titulo .meta{font-size:8.5pt;opacity:.92;text-align:right}.titulo .meta span{display:inline-block;margin-left:10px}
+    .resumo{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 3mm}
+    .resumo span{background:#e9efff;color:#1d3b82;border-radius:999px;padding:3px 10px;font-size:8.5pt;font-weight:700}
+    table.dados{width:100%;border-collapse:separate;border-spacing:0;font-size:${cols.length > 7 ? '8pt' : '9pt'};border:1px solid #d6def0;border-radius:8px;overflow:hidden}
+    table.dados th{background:#2f56b0;color:#fff;text-align:left;padding:5px 6px;font-size:7.8pt;text-transform:uppercase;letter-spacing:.04em}
+    table.dados td{padding:4px 6px;border-top:1px solid #e3e8f1;vertical-align:top}
+    table.dados tbody tr:nth-child(even) td{background:#f4f7fc}
+    table.dados tr{page-break-inside:avoid}table.dados tr.total td{font-weight:800;background:#e9efff;border-top:2px solid #2f56b0}table.dados tr.late td{background:#fdeceb;color:#8a2a20}
+    .n{color:#8592a8;width:1%;white-space:nowrap;text-align:right}.num{text-align:right;white-space:nowrap}
+    .lgpd{margin-top:3mm;font-size:8pt;color:#8a5a00;background:#fff3d6;border-radius:6px;padding:4px 8px;display:inline-block}
+    .rod{height:13mm}
+    .rodape{position:fixed;left:0;right:0;bottom:0;height:10mm;font-size:7.8pt;color:#5b6b82}
+    .rodape .giz{margin:0 0 2mm;height:3px}.rodape div{display:flex;justify-content:space-between;gap:10px}.rodape div span:last-child{white-space:nowrap}
+    @media screen{body{max-width:${pais ? '277mm' : '190mm'};margin:10mm auto;padding:0 6mm}.rodape{position:static;margin-top:8mm}.rod{height:0}
+      .dica{position:sticky;top:0;z-index:2;background:#fff8d6;border:1px solid #e8d48a;padding:8px 12px;border-radius:8px;font:13px Arial;margin-bottom:10px}}
+    @media print{.dica{display:none}}
+  </style></head><body><div class="dica">Use <b>Ctrl+P</b> e escolha a impressora ou <b>Salvar como PDF</b>. O cabeçalho com o logotipo se repete em cada página.</div>
+  <table class="pagina"><thead><tr><td><div class="marca"><img src="${origin}/logo-lindolpho.png" alt="CEI Lindolpho"><div class="nome"><b>CEI Lindolpho José da Silva</b><small>Centro de Educação Infantil · Araquari-SC</small></div><div class="tipo"><b>Relatório</b><br>${cxEsc(hoje)}</div></div><div class="giz"></div></td></tr></thead>
+  <tfoot><tr><td class="rod"></td></tr></tfoot>
+  <tbody><tr><td>
+    <div class="titulo"><h1>${cxEsc(r.titulo)}</h1>${(r.meta || []).length ? `<div class="meta">${r.meta.map(([k, v]) => `<span><b>${cxEsc(k)}:</b> ${cxEsc(v)}</span>`).join('')}</div>` : ''}</div>
+    <div class="resumo"><span>${r.linhas.filter(l => !l.total).length} ${r.linhas.filter(l => !l.total).length === 1 ? 'registro' : 'registros'}</span>${(r.resumo || '').split(/\n| · /).filter(Boolean).map(t => `<span>${cxEsc(t)}</span>`).join('')}</div>
+    ${tabela}
+    ${r.pessoal ? '<p class="lgpd">Uso interno · contém dados pessoais protegidos pela LGPD (Lei nº 13.709/2018).</p>' : ''}
+  </td></tr></tbody></table>
+  <div class="rodape"><div class="giz"></div><div><span>CEI Lindolpho José da Silva${contato ? ' · ' + contato : ''}</span><span>Emitido em ${cxEsc(hoje)}, ${cxEsc(hora)}</span></div></div>
+  <script>Promise.all([...document.images].map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r}))).then(()=>setTimeout(()=>print(),250))<\/script></body></html>`);
+  w.document.close();
+};
 
 /* ---------- Papel timbrado livre (professores e administração) ---------- */
 function cxTimbradoDocs() { return (state.generatedDocs || []).filter(g => g.template === 'documentoTimbrado' && (!CX_TEACHER || g.ownerEmail === CX_SESSION.email || !g.ownerEmail)).sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt))); }
