@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '57';
+const CX_VERSION = '59';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -195,7 +195,7 @@ function cxBuildNav() {
   if (doc) frag.append(doc); frag.append(make('timbrado', '📄 Papel timbrado'));
   frag.append(group('Financeiro'), make('financeiro', '💰 Saldos e lançamentos'));
   frag.append(group('Colegiados'), make('colegiado', '◇ Conselho Escolar', {orgao: 'conselho'}), make('colegiado', '◉ APP', {orgao: 'app'}));
-  frag.append(group('Secretaria'), make('equipe', '👥 Equipe da instituição'), make('enturmacao', '🎂 Ver enturmação'));
+  frag.append(group('Secretaria'), make('equipe', '👥 Equipe da instituição'), make('turmas', '🏫 Turmas do ano'), make('enturmacao', '🎂 Ver enturmação'));
   if (esp) frag.append(esp); if (bib) frag.append(bib); if (solic) frag.append(solic);
   frag.append(group('Sistema'), make('relatorios', '📊 Relatórios'), make('publica', '🌐 Página pública'));
   if (acessos) frag.append(acessos); if (seg) frag.append(seg);
@@ -244,6 +244,7 @@ render = function () {
   if (state.view === 'enturmacao') { setHead('enturmacao'); cxMarkActive(); return cxRenderEnturmacao(a); }
   if (CX_ADMIN && state.view === 'atas') { setHead('atas'); cxMarkActive(); return cxRenderAtas(a); }
   if (CX_ADMIN && state.view === 'publica') { setHead('publica'); cxMarkActive(); return cxRenderPublic(a); }
+  if (CX_ADMIN && state.view === 'turmas') { document.getElementById('title').textContent = 'Turmas do ano'; document.getElementById('subtitle').textContent = 'Quantas turmas o CEI atende em cada ano, por faixa de idade — aparece na página pública'; cxMarkActive(); return cxRenderTurmas(a); }
   if (CX_ADMIN && state.view === 'relatorios') { document.getElementById('title').textContent = 'Relatórios'; document.getElementById('subtitle').textContent = 'Listas prontas para consulta rápida, impressão (com o logotipo do CEI) ou planilha'; cxMarkActive(); return cxRenderRelatorios(a); }
   if (CX_ADMIN && state.view === 'equipe') { document.getElementById('title').textContent = 'Equipe da instituição'; document.getElementById('subtitle').textContent = 'Gestão, professores, administrativo e apoio — com foto para a página pública'; cxMarkActive(); return cxRenderEquipe(a); }
   if (CX_ADMIN && state.view === 'colegiado') { const o = CX_ORGAOS[cx.orgao] || CX_ORGAOS.conselho; document.getElementById('title').textContent = o.titulo; document.getElementById('subtitle').textContent = 'Composição atual, mandatos anteriores e documentos'; cxMarkActive(); return cxRenderColegiado(a); }
@@ -822,7 +823,7 @@ async function cxLoadColegiados(force) {
 function cxMembrosTabela(c, contatos = true) {
   const ordem = m => (m.condicao === 'suplente' ? 1 : 0);
   const list = [...c.membros].sort((a, b) => ordem(a) - ordem(b));
-  return `<div class="cx-table-wrap"><table class="cx-table"><thead><tr><th style="width:52px"></th><th>Nome</th><th>Cargo / função</th><th>Segmento</th>${contatos ? '<th>Telefone</th><th>E-mail</th>' : ''}</tr></thead><tbody>${list.map(m => `<tr><td>${cxFotoThumb(cxFotoMembro(m), m.nome, 40)}</td><td><b>${cxEsc(m.nome)}</b>${m.condicao === 'suplente' ? ' <span class="cx-chip">suplente</span>' : ''}</td><td>${cxEsc(m.cargo)}</td><td>${cxEsc(m.segmento)}</td>${contatos ? `<td>${m.telefone ? `<a href="tel:${cxEsc(m.telefone.replace(/[^\d+]/g, ''))}">${cxEsc(m.telefone)}</a>${m.telefone.replace(/\D/g, '').length >= 10 ? ` <a class="cx-chip ok" href="https://wa.me/55${cxEsc(m.telefone.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}` : '—'}</td><td>${m.email ? `<a href="mailto:${cxEsc(m.email)}">${cxEsc(m.email)}</a>` : '—'}</td>` : ''}</tr>`).join('')}</tbody></table></div>`;
+  return `<div class="cx-table-wrap"><table class="cx-table"><thead><tr><th style="width:52px"></th><th>Nome</th><th>Cargo / função</th><th>Segmento</th>${contatos ? '<th>Telefone</th><th>E-mail</th>' : ''}</tr></thead><tbody>${list.map(m0 => { const m = {...m0, ...cxContatoMembro(m0)}; return `<tr><td>${cxFotoThumb(cxFotoMembro(m), m.nome, 40)}</td><td><b>${cxEsc(m.nome)}</b>${m.condicao === 'suplente' ? ' <span class="cx-chip">suplente</span>' : ''}</td><td>${cxEsc(m.cargo)}</td><td>${cxEsc(m.segmento)}</td>${contatos ? `<td>${m.telefone ? `<a href="tel:${cxEsc(m.telefone.replace(/[^\d+]/g, ''))}">${cxEsc(m.telefone)}</a>${m.telefone.replace(/\D/g, '').length >= 10 ? ` <a class="cx-chip ok" href="https://wa.me/55${cxEsc(m.telefone.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}` : '—'}</td><td>${m.email ? `<a href="mailto:${cxEsc(m.email)}">${cxEsc(m.email)}</a>` : '—'}</td>` : ''}</tr>`; }).join('')}</tbody></table></div>`;
 }
 function cxChapaCard(c, orgao, destaque) {
   const s = cxSituacao(c), O = CX_ORGAOS[orgao];
@@ -1086,22 +1087,30 @@ const cxR = {sel: 'conselho', opts: {}};
 const cxAnoAtual = () => cxToday().slice(0, 4);
 const cxAnosFin = () => { const s = new Set([cxAnoAtual()]); (cx.records || []).forEach(r => { if (r.fin && r.date) s.add(String(r.date).slice(0, 4)); }); return [...s].sort().reverse(); };
 const cxEqCat = k => (CX_EQ_CATS.find(c => c[0] === k) || [, ''])[1].replace(/ \(.*\)$/, '');
+// Contato do membro: o que foi digitado na composição; se estiver vazio, o da mesma pessoa na Equipe da instituição.
+function cxContatoMembro(m) {
+  const e = (cx.equipe || []).find(x => cxNomeKey(x.nome) === cxNomeKey(m.nome)) || {};
+  return {telefone: m.telefone || e.telefone || '', email: m.email || e.email || ''};
+}
 function cxColegReport(orgao, o) {
   const all = (cx.colegiados || {})[orgao] || [], h = cxToday(), O = CX_ORGAOS[orgao];
   const lista = o.quais === 'todas' ? [...all].sort((a, b) => b.inicio.localeCompare(a.inicio)) : all.filter(c => c.inicio <= h && c.fim >= h);
   const linhas = [];
   for (const c of lista) for (const m of [...c.membros].sort((a, b) => (a.condicao === 'suplente') - (b.condicao === 'suplente')))
-    linhas.push({gestao: c.nome, mandato: `${cxBR(c.inicio)} a ${cxBR(c.fim)}`, nome: m.nome, cargo: m.cargo, segmento: m.segmento, condicao: m.condicao === 'suplente' ? 'Suplente' : 'Titular', telefone: m.telefone, email: m.email});
+    linhas.push({gestao: c.nome, mandato: `${cxBR(c.inicio)} a ${cxBR(c.fim)}`, nome: m.nome, cargo: m.cargo, segmento: m.segmento, condicao: m.condicao === 'suplente' ? 'Suplente' : 'Titular', ...cxContatoMembro(m)});
   const cols = [...(lista.length > 1 ? [['gestao', 'Gestão'], ['mandato', 'Mandato']] : []), ['nome', 'Nome'], ['cargo', 'Cargo / função'], ['segmento', 'Segmento'], ['condicao', 'Condição'], ...(o.contatos !== false ? [['telefone', 'Telefone'], ['email', 'E-mail']] : [])];
+  const semContato = o.contatos !== false && linhas.length && !linhas.some(l => l.telefone || l.email);
   return {titulo: orgao === 'app' ? 'Composição da APP — Associação de Pais e Professores' : 'Composição do Conselho Escolar', colunas: cols, linhas, pessoal: o.contatos !== false,
+    manter: o.contatos !== false ? ['telefone', 'email'] : [], // pedido explícito: as colunas aparecem mesmo vazias
+    aviso: semContato ? `Nenhum membro tem telefone ou e-mail cadastrado. Preencha em ${O.titulo} → Editar (ou na Equipe da instituição, para quem também trabalha no CEI).` : '',
     meta: lista.length === 1 ? [['Gestão', lista[0].nome], ['Mandato', `${cxBR(lista[0].inicio)} a ${cxBR(lista[0].fim)}`], ...(lista[0].ata ? [['Eleição / posse', lista[0].ata]] : [])] : [['Composições', o.quais === 'todas' ? 'Todas (histórico)' : 'Vigentes hoje']],
     vazio: o.quais === 'todas' ? 'Nenhuma composição cadastrada.' : `Nenhuma composição vigente hoje. Cadastre em ${O.titulo} ou escolha “Todas (histórico)”.`};
 }
 const CX_RELATORIOS = [
-  {grupo: 'Colegiados', id: 'conselho', titulo: 'Composição do Conselho Escolar', desc: 'Membros, cargos, segmentos e contatos.', icone: '◇', load: ['colegiados'],
+  {grupo: 'Colegiados', id: 'conselho', titulo: 'Composição do Conselho Escolar', desc: 'Membros, cargos, segmentos e contatos.', icone: '◇', load: ['colegiados', 'equipe'],
     opcoes: [['quais', 'Composições', [['vigente', 'Vigente hoje'], ['todas', 'Todas (histórico)']]], ['contatos', 'Contatos', [['sim', 'Com telefone e e-mail'], ['nao', 'Sem contatos']]]],
     gerar: o => cxColegReport('conselho', {...o, contatos: o.contatos !== 'nao'})},
-  {grupo: 'Colegiados', id: 'app', titulo: 'Diretoria da APP', desc: 'Membros da chapa, cargos e contatos.', icone: '◉', load: ['colegiados'],
+  {grupo: 'Colegiados', id: 'app', titulo: 'Diretoria da APP', desc: 'Membros da chapa, cargos e contatos.', icone: '◉', load: ['colegiados', 'equipe'],
     opcoes: [['quais', 'Composições', [['vigente', 'Vigente hoje'], ['todas', 'Todas (histórico)']]], ['contatos', 'Contatos', [['sim', 'Com telefone e e-mail'], ['nao', 'Sem contatos']]]],
     gerar: o => cxColegReport('app', {...o, contatos: o.contatos !== 'nao'})},
   {grupo: 'Colegiados', id: 'mandatos', titulo: 'Mandatos da APP e do Conselho', desc: 'Todas as gestões, com período e situação.', icone: '🗓', load: ['colegiados'], opcoes: [],
@@ -1113,7 +1122,7 @@ const CX_RELATORIOS = [
     gerar: o => { const ord = Object.fromEntries(CX_EQ_CATS.map(([k], i) => [k, i]));
       const linhas = (cx.equipe || []).filter(e => !o.grupo || e.categoria === o.grupo).sort((a, b) => (ord[a.categoria] - ord[b.categoria]) || cxCol.compare(a.nome, b.nome)).map(e => ({grupo: cxEqCat(e.categoria), nome: e.nome, funcao: e.funcao, vinculo: e.vinculo, atuacao: e.atuacao, telefone: e.telefone, email: e.email}));
       const por = CX_EQ_CATS.map(([k]) => [cxEqCat(k), (cx.equipe || []).filter(e => e.categoria === k && (!o.grupo || k === o.grupo)).length]).filter(([, n]) => n);
-      return {titulo: 'Equipe da instituição', colunas: [['grupo', 'Grupo'], ['nome', 'Nome'], ['funcao', 'Função'], ['vinculo', 'Vínculo'], ['atuacao', 'Atuação'], ...(o.contatos !== 'nao' ? [['telefone', 'Telefone'], ['email', 'E-mail']] : [])], linhas, pessoal: o.contatos !== 'nao', paisagem: o.contatos !== 'nao',
+      return {titulo: 'Equipe da instituição', colunas: [['grupo', 'Grupo'], ['nome', 'Nome'], ['funcao', 'Função'], ['vinculo', 'Vínculo'], ['atuacao', 'Atuação'], ...(o.contatos !== 'nao' ? [['telefone', 'Telefone'], ['email', 'E-mail']] : [])], linhas, pessoal: o.contatos !== 'nao', paisagem: o.contatos !== 'nao', manter: o.contatos !== 'nao' ? ['telefone', 'email'] : [],
         resumo: por.map(([g, n]) => `${g}: ${n}`).join(' · '), vazio: 'Nenhuma pessoa cadastrada em Equipe da instituição.'}; }},
   {grupo: 'Pessoas', id: 'contatos', titulo: 'Agenda de contatos', desc: 'Equipe, Conselho e APP numa lista só, para ligar ou mandar mensagem.', icone: '📇', load: ['equipe', 'colegiados'], opcoes: [],
     gerar: () => { const m = new Map(), h = cxToday(), add = (nome, papel, tel, email) => { const k = cxNomeKey(nome); const x = m.get(k) || {nome, papeis: [], telefone: '', email: ''}; x.papeis.push(papel); x.telefone ||= tel || ''; x.email ||= email || ''; m.set(k, x); };
@@ -1143,6 +1152,13 @@ const CX_RELATORIOS = [
     gerar: o => { const fim = ['matriculou', 'rejeitou', 'retirou_encaminhamento', 'outro_local'];
       const l = (state.waitlist || []).filter(w => !o.status || (o.status === 'abertas' ? !fim.includes(w.status) : w.status === o.status)).sort((a, b) => String(a.recebimento).localeCompare(String(b.recebimento))).map(w => ({crianca: w.crianca, nascimento: cxBR(w.nascimento), turma: w.turma, destino: w.destino, responsavel: w.responsavel, telefone: w.telefone, recebimento: cxBR(w.recebimento), situacao: waitStatusLabel(w.status)}));
       return {titulo: 'Lista de espera e vagas', paisagem: true, colunas: [['crianca', 'Criança'], ['nascimento', 'Nascimento'], ['turma', 'Turma'], ['destino', 'Destino'], ['responsavel', 'Responsável'], ['telefone', 'Telefone'], ['recebimento', 'Recebida em'], ['situacao', 'Situação']], linhas: l, pessoal: true, vazio: 'Nenhuma vaga com esse filtro.'}; }},
+  {grupo: 'Secretaria', id: 'turmas', titulo: 'Turmas do ano', desc: 'Turmas por faixa, com nascimento, turno, professor(a) e vagas.', icone: '🏫', load: ['turmas'],
+    opcoes: [['ano', 'Ano letivo', () => { const a = Object.keys((cxTur.dados || {}).turmas || {}).sort().reverse(); return a.length ? a.map(x => [x, x]) : [[cxAnoAtual(), cxAnoAtual()]]; }]],
+    gerar: o => { const ano = Number(o.ano), lista = ((cxTur.dados || {}).turmas || {})[ano] || [];
+      const linhas = CX_TURMAS.flatMap(f => { const fx = cxFaixa(f.idade, ano); return lista.filter(t => t.faixa === f.idade).map(t => ({faixa: f.nome, nascidos: `${cxBR(fx.de)} a ${cxBR(fx.ate)}`, turma: t.nome, turno: t.turno ? t.turno[0].toUpperCase() + t.turno.slice(1) : '', professor: t.professor, sala: t.sala, vagas: t.vagas ?? ''})); });
+      const vagas = lista.reduce((s, t) => s + (t.vagas || 0), 0);
+      return {titulo: 'Turmas do ano', meta: [['Ano letivo', String(ano)]], paisagem: true, colunas: [['faixa', 'Faixa'], ['nascidos', 'Nascidos entre'], ['turma', 'Turma'], ['turno', 'Turno'], ['professor', 'Professor(a)'], ['sala', 'Sala'], ['vagas', 'Vagas', 'num']], linhas,
+        resumo: CX_TURMAS.map(f => [f.nome, lista.filter(t => t.faixa === f.idade).length]).filter(x => x[1]).map(([n, q]) => `${n}: ${q}`).join(' · ') + (vagas ? `\nTotal de vagas: ${vagas}` : ''), vazio: `As turmas de ${ano} não foram registradas. Use Secretaria → Turmas do ano.`}; }},
   {grupo: 'Secretaria', id: 'oficios', titulo: 'Ofícios expedidos', desc: 'Número, data, destinatário e assunto.', icone: '✉', load: [],
     opcoes: [['ano', 'Ano', () => [['', 'Todos'], ...[...new Set((state.oficios || []).map(x => String(x.ano || String(x.data || '').slice(0, 4))).filter(Boolean))].sort().reverse().map(a => [a, a])]]],
     gerar: o => { const l = (state.oficios || []).filter(x => !o.ano || String(x.ano || String(x.data).slice(0, 4)) === o.ano).sort((a, b) => String(a.data).localeCompare(String(b.data))).map(x => ({numero: `${x.numero}/${x.ano || String(x.data).slice(0, 4)}`, data: cxBR(x.data), destinatario: x.destinatario, assunto: x.assunto}));
@@ -1186,12 +1202,12 @@ const CX_RELATORIOS = [
 ];
 async function cxRelLoad(def) {
   const need = def.load || [];
-  await Promise.all([need.includes('colegiados') && cxLoadColegiados(true), need.includes('equipe') && cxLoadEquipe(true), (need.includes('records') || def.opcoes.some(o => typeof o[2] === 'function')) && cxLoad(true)].filter(Boolean));
+  await Promise.all([need.includes('turmas') && cxTurLoad(true), need.includes('colegiados') && cxLoadColegiados(true), need.includes('equipe') && cxLoadEquipe(true), (need.includes('records') || def.opcoes.some(o => typeof o[2] === 'function')) && cxLoad(true)].filter(Boolean));
 }
 // Ordem alfabética que ignora pontuação e aspas no início (": a Bela…", "\"a Linha…\"").
 const cxCol = new Intl.Collator('pt-BR', {sensitivity: 'base', ignorePunctuation: true, numeric: true});
 // Colunas sem nenhum valor somem da tela e da impressão (a planilha mantém todas).
-const cxRelCols = r => r.colunas.filter(([k]) => r.linhas.some(l => cxRelCell(l[k]).trim()));
+const cxRelCols = r => r.colunas.filter(([k]) => (r.manter || []).includes(k) || r.linhas.some(l => cxRelCell(l[k]).trim()));
 const cxRelOpts = def => def.opcoes.map(([k, label, vals]) => { const list = typeof vals === 'function' ? vals() : vals; return [k, label, list]; });
 function cxRelCell(v) { return v === undefined || v === null ? '' : String(v); }
 async function cxRenderRelatorios(a) {
@@ -1210,6 +1226,7 @@ async function cxRenderRelatorios(a) {
       <div class="cx-btns"><button class="cx-btn primary" onclick="cxRelPrint()" ${r.linhas.length ? '' : 'disabled'}>🖨 Imprimir / PDF</button><button class="cx-btn" onclick="cxRelCsv()" ${r.linhas.length ? '' : 'disabled'}>⬇ Planilha (Excel)</button></div></div>
     ${campos.length ? `<div class="cx-rel-opts">${campos.map(([k, label, list]) => `<label>${cxEsc(label)}<select onchange="cxRelOpt('${k}', this.value)">${list.map(([v, t]) => `<option value="${cxEsc(v)}" ${opts[k] === v ? 'selected' : ''}>${cxEsc(t)}</option>`).join('')}</select></label>`).join('')}</div>` : ''}
     ${(r.meta || []).length ? `<p class="cx-rel-meta">${r.meta.map(([k, v]) => `<span><b>${cxEsc(k)}:</b> ${cxEsc(v)}</span>`).join('')}</p>` : ''}
+    ${r.aviso ? `<div class="cx-empty" style="border:1.5px dashed #e8c76a;background:#fff8e1;color:#7a5700;margin:10px 0;text-align:left">${cxEsc(r.aviso)}</div>` : ''}
     ${r.pessoal ? '<p class="hint">⚠ Contém dados pessoais. Use só para a finalidade da escola e não compartilhe em grupos (LGPD).</p>' : ''}
     ${r.linhas.length ? `<p class="cx-rel-count"><b>${r.linhas.filter(l => !l.total).length}</b> linha(s)${r.resumo ? ' · ' + cxEsc(r.resumo).replace(/\n/g, '<br>') : ''}</p>
       <div class="cx-table-wrap"><table class="cx-table cx-rel-table"><thead><tr><th>#</th>${cols.map(([, t, al]) => `<th class="${al || ''}">${cxEsc(t)}</th>`).join('')}</tr></thead><tbody>${rows.map((l, i) => `<tr${l.atraso ? ' class="cx-rel-late"' : l.total ? ' class="cx-rel-total"' : ''}><td class="num">${l.total ? '' : i + 1}</td>${cols.map(([k, , al]) => `<td class="${al || ''}">${cxEsc(cxRelCell(l[k]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
@@ -1638,6 +1655,7 @@ function cxRenderEnturmacao(a) {
     </div><div id="cxEntResult"></div></div>
     <div class="panel"><div class="cx-head"><h2>Tabela de enturmação</h2><div class="cx-btns" style="align-items:center"><button class="cx-btn small" onclick="cxEntState.ano--;cxEntTable()" aria-label="Ano anterior">‹</button><b id="cxEntAno" style="font-size:18px;min-width:60px;text-align:center"></b><button class="cx-btn small" onclick="cxEntState.ano++;cxEntTable()" aria-label="Próximo ano">›</button><button class="cx-btn small" onclick="cxEntState.ano=${hoje};cxEntTable()">Ano atual</button></div></div><div id="cxEntTable" style="margin-top:12px"></div></div>`;
   cxEntResult(); cxEntTable();
+  if (CX_ADMIN && !cxTur.dados) cxTurLoad().then(() => { if (state.view === 'enturmacao') cxEntResult(); }).catch(() => {});
 }
 window.cxEntResult = () => {
   const el = document.getElementById('cxEntResult'); if (!el) return;
@@ -1648,7 +1666,9 @@ window.cxEntResult = () => {
     const body = r.tipo === 'cei' ? `<div class="cx-big" style="color:${r.turma.cor}">${cxEsc(r.turma.nome)}</div><small class="muted">${r.idade} anos completos até 31/03/${ano} · faixa ${cxBR(cxFaixa(r.idade, ano).de)} a ${cxBR(cxFaixa(r.idade, ano).ate)}</small>`
       : r.tipo === 'novo' ? `<div class="cx-big" style="color:#8a5a00">Ainda não</div><small class="muted">${r.idade < 0 ? 'Ainda não completou idade' : r.idade + ' ano(s) até 31/03/' + ano}; entra no <b>Maternal em ${r.entra}</b>.</small>`
       : `<div class="cx-big" style="color:#5b6b82">Ensino Fundamental</div><small class="muted">${r.idade} anos até 31/03/${ano}: já passou da idade da educação infantil (1º ano).</small>`;
-    return `<div class="cx-account" style="cursor:default;border-top:6px solid ${r.tipo === 'cei' ? r.turma.cor : '#cfd8e5'}"><h3>Ano letivo ${ano}</h3>${body}</div>`; };
+    const reg = r.tipo === 'cei' ? ((cxTur.dados?.turmas || {})[ano] || []).filter(t => t.faixa === r.turma.idade) : [];
+    const turmasTxt = r.tipo !== 'cei' || !cxTur.dados ? '' : reg.length ? `<small style="display:block;margin-top:6px">Turmas em ${ano}: ${reg.map(t => `<b>${cxEsc(t.nome)}</b>${t.turno ? ' (' + cxEsc(t.turno) + ')' : ''}`).join(', ')}</small>` : (cxTur.dados.turmas || {})[ano] ? `<small style="display:block;margin-top:6px;color:#b3261e">O CEI não registrou turma de ${cxEsc(r.turma.nome)} em ${ano}.</small>` : '';
+    return `<div class="cx-account" style="cursor:default;border-top:6px solid ${r.tipo === 'cei' ? r.turma.cor : '#cfd8e5'}"><h3>Ano letivo ${ano}</h3>${body}${turmasTxt}</div>`; };
   const traj = CX_TURMAS.map(t => { const ano = cxRefYear(iso) + t.idade; return `<li><span><b style="color:${t.cor};display:inline-block;min-width:80px">${cxEsc(t.nome)}</b> em ${ano}</span>${ano === hoje ? '<span class="cx-chip ok">este ano</span>' : ano === hoje + 1 ? '<span class="cx-chip warn">próximo ano</span>' : ano < hoje ? '<span class="muted" style="font-size:12px">já cursou</span>' : '<span></span>'}</li>`; }).join('');
   el.innerHTML = `<div class="cx-accounts" style="margin-top:16px">${card(hoje)}${card(hoje + 1)}</div>
     <div class="cx-summary-grid" style="margin-top:12px"><div>Idade hoje<b>${cxEsc(cxIdadeHoje(iso))}</b></div><div>Nascimento<b>${cxEsc(cxLongDate(iso))}</b></div></div>
@@ -1662,6 +1682,78 @@ window.cxEntTable = () => {
     <p class="hint">Calculada automaticamente pela data de corte de 31 de março. Use as setas para ver outros anos.</p>`;
 };
 window.cxEnturmar = cxEnturmar;
+
+/* ---------- Turmas do ano (v59) ----------
+   Faixas iguais às da Ver enturmação (CX_TURMAS, corte em 31/03). A faixa de nascimento é calculada, não digitada. */
+const cxTur = {ano: null, dados: null};
+const CX_TURNOS = [['', '—'], ['matutino', 'Matutino'], ['vespertino', 'Vespertino'], ['integral', 'Integral']];
+async function cxTurLoad(force) { if (!cxTur.dados || force) cxTur.dados = await cxRequest('/api/portal/turmas'); return cxTur.dados; }
+const cxLetra = i => String.fromCharCode(65 + i);
+function cxTurmaRow(t, faixa) {
+  return `<div class="cx-turma" data-faixa="${faixa}" data-id="${cxEsc(t.id || '')}">
+    <label>Nome da turma<input data-t="nome" maxlength="60" value="${cxEsc(t.nome || '')}" data-case="off"></label>
+    <label>Turno<select data-t="turno">${CX_TURNOS.map(([v, l]) => `<option value="${v}" ${t.turno === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label>Vagas<input data-t="vagas" type="number" min="0" max="99" inputmode="numeric" value="${t.vagas ?? ''}"></label>
+    <label>Professor(a)<input data-t="professor" list="cxEquipeProf" maxlength="160" value="${cxEsc(t.professor || '')}"></label>
+    <label>Sala<input data-t="sala" maxlength="60" value="${cxEsc(t.sala || '')}"></label>
+    <button type="button" class="cx-btn small danger" onclick="this.closest('.cx-turma').remove();cxTurTotais()" aria-label="Remover turma">✕</button></div>`;
+}
+async function cxRenderTurmas(a) {
+  a.innerHTML = '<div class="panel" style="margin-top:0"><p class="muted">Carregando…</p></div>';
+  try { await Promise.all([cxTurLoad(true), cxLoadEquipe().catch(() => {})]); } catch (e) { a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-empty">${cxEsc(e.message)}</div></div>`; return; }
+  if (state.view !== 'turmas') return;
+  const hoje = Number(cxToday().slice(0, 4)), reg = Object.keys(cxTur.dados.turmas).map(Number);
+  const anos = [...new Set([...reg, hoje, hoje + 1])].sort((x, y) => y - x);
+  if (!cxTur.ano) cxTur.ano = hoje;
+  const ano = cxTur.ano, lista = cxTur.dados.turmas[ano], salvo = Array.isArray(lista), pub = cxTur.dados.publico || {};
+  const anterior = [...reg].filter(x => x < ano).sort().pop();
+  a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-head"><div><h2>Turmas de ${ano}</h2><p>Registre quantas turmas de cada faixa o CEI atende neste ano. A data de nascimento de cada faixa segue a regra da <b>Ver enturmação</b> (idade completa até 31/03) e é calculada sozinha.</p></div>
+      <div class="cx-btns"><a class="cx-btn" href="/#turmas" target="_blank" rel="noopener">Ver na página pública ↗</a></div></div>
+    <div class="cx-turma-anos" role="tablist">${anos.map(x => `<button class="${x === ano ? 'on' : ''}" onclick="cxTurAno(${x})">${x}${reg.includes(x) ? '' : ' <small>não registrado</small>'}</button>`).join('')}<button onclick="cxTurOutroAno()">+ Outro ano</button></div>
+    ${!salvo ? `<div class="cx-empty" style="margin-top:12px;text-align:left">As turmas de ${ano} ainda não foram registradas. Adicione as turmas abaixo${anterior ? ` ou <button class="cx-btn small" onclick="cxTurCopiar(${anterior})">copie as de ${anterior}</button>` : ''} e clique em Salvar.</div>` : ''}</div>
+    <datalist id="cxEquipeProf">${(cx.equipe || []).filter(e => e.categoria === 'professores').map(e => `<option value="${cxEsc(e.nome)}">`).join('')}</datalist>
+    <div class="cx-turma-grid" id="cxTurGrid">${CX_TURMAS.map(f => { const fx = cxFaixa(f.idade, ano), ts = (lista || []).filter(t => t.faixa === f.idade);
+      return `<section class="panel cx-faixa" style="border-top:6px solid ${f.cor}"><div class="cx-head"><div><h2 style="color:${f.cor}">${cxEsc(f.nome)}</h2><p>Nascidos de <b>${cxBR(fx.de)}</b> a <b>${cxBR(fx.ate)}</b> · ${f.idade} anos completos até 31/03/${ano}</p></div>
+        <div class="cx-faixa-n"><b data-n="${f.idade}">${ts.length}</b><small>turma(s)</small></div></div>
+        <div class="cx-turmas" data-faixa="${f.idade}">${ts.map(t => cxTurmaRow(t, f.idade)).join('')}</div>
+        <button class="cx-btn small" onclick="cxTurAdd(${f.idade})">+ Adicionar turma de ${cxEsc(f.nome)}</button></section>`; }).join('')}</div>
+    <div class="panel"><div class="cx-head"><div><h2>Na página pública</h2><p id="cxTurTot"></p></div></div>
+      <div class="cx-transp-opts"><label class="cx-check"><input type="checkbox" id="cxTurPubProf" ${pub.professor === false ? '' : 'checked'}> Mostrar o nome do(a) professor(a) de cada turma</label><label class="cx-check"><input type="checkbox" id="cxTurPubVagas" ${pub.vagas === false ? '' : 'checked'}> Mostrar o número de vagas</label></div>
+      <div class="cx-btns" style="margin-top:10px"><button class="cx-btn primary" onclick="cxTurSalvar()">Salvar turmas de ${ano}</button>${salvo ? `<button class="cx-btn danger" onclick="cxTurExcluir()">Excluir registro de ${ano}</button>` : ''}</div></div>`;
+  cxTurTotais();
+}
+window.cxTurAdd = faixa => {
+  const box = document.querySelector(`.cx-turmas[data-faixa="${faixa}"]`), f = CX_TURMAS.find(x => x.idade === faixa), n = box.querySelectorAll('.cx-turma').length;
+  // Nomes automáticos: "Pré I A", "Pré I B"… (a primeira turma ganha a letra A quando chega a segunda)
+  const first = box.querySelector('.cx-turma [data-t="nome"]'); if (n === 1 && first && first.value.trim() === f.nome) first.value = f.nome + ' A';
+  box.insertAdjacentHTML('beforeend', cxTurmaRow({nome: n ? `${f.nome} ${cxLetra(n)}` : f.nome}, faixa));
+  box.lastElementChild.querySelector('[data-t="nome"]').focus(); cxTurTotais();
+};
+window.cxTurTotais = () => {
+  let turmas = 0, vagas = 0, comVagas = 0;
+  for (const f of CX_TURMAS) { const rows = document.querySelectorAll(`.cx-turmas[data-faixa="${f.idade}"] .cx-turma`); turmas += rows.length; const b = document.querySelector(`[data-n="${f.idade}"]`); if (b) b.textContent = rows.length;
+    rows.forEach(r => { const v = r.querySelector('[data-t="vagas"]').value; if (v !== '') { vagas += Number(v); comVagas++; } }); }
+  const el = document.getElementById('cxTurTot'); if (el) el.textContent = `${turmas} turma(s) em ${cxTur.ano}${comVagas ? ` · ${vagas} vaga(s) informada(s)` : ''}. A página pública mostra o ano atual e os anos seguintes já registrados (útil na época de rematrícula).`;
+};
+const cxTurColetar = () => [...document.querySelectorAll('#cxTurGrid .cx-turma')].map(r => ({id: r.dataset.id || undefined, faixa: Number(r.dataset.faixa), ...Object.fromEntries([...r.querySelectorAll('[data-t]')].map(i => [i.dataset.t, i.value.trim()]))}));
+window.cxTurSalvar = async () => {
+  const turmas = cxTurColetar();
+  try {
+    await cxRequest('/api/portal/turmas', {method: 'POST', body: JSON.stringify({ano: cxTur.ano, turmas, publico: {professor: document.getElementById('cxTurPubProf').checked, vagas: document.getElementById('cxTurPubVagas').checked}})});
+    notify(`Turmas de ${cxTur.ano} salvas (${turmas.length}).`); render();
+  } catch (e) { notify(e.message); }
+};
+window.cxTurCopiar = async de => {
+  const src = (cxTur.dados.turmas[de] || []).map(t => ({...t, id: undefined}));
+  for (const f of CX_TURMAS) { const box = document.querySelector(`.cx-turmas[data-faixa="${f.idade}"]`); box.innerHTML = src.filter(t => t.faixa === f.idade).map(t => cxTurmaRow(t, f.idade)).join(''); }
+  cxTurTotais(); notify(`Turmas de ${de} copiadas. Ajuste professores e vagas e clique em Salvar.`);
+};
+window.cxTurAno = n => { cxTur.ano = n; render(); };
+window.cxTurOutroAno = () => { const v = prompt('Qual ano deseja registrar?', String(cxTur.ano + 1)); const n = Number(v); if (Number.isInteger(n) && n >= 2020 && n <= 2100) { cxTur.ano = n; render(); } };
+window.cxTurExcluir = async () => {
+  if (!await cxConfirmTyped(`Turmas ${cxTur.ano}`, 'O registro das turmas deste ano sai da área restrita e da página pública.')) return;
+  try { await cxRequest('/api/portal/turmas', {method: 'POST', body: JSON.stringify({ano: cxTur.ano, delete: true})}); notify('Registro excluído.'); render(); } catch (e) { notify(e.message); }
+};
 
 /* ---------- Inicialização ---------- */
 document.addEventListener('click', e => { document.querySelectorAll('details.cx-more[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.cx-more-menu')) d.open = false; }); });

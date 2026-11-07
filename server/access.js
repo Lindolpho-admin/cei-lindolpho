@@ -40,6 +40,24 @@ export function publicEquipe(p){
 }
 export function fotosPublicas(p){const {equipe,colegiados:col}=publicEquipe(p),set=new Set(equipe.map(e=>e.foto).filter(Boolean));for(const ch of Object.values(col))for(const m of ch.membros)if(m.foto)set.add(m.foto);return set}
 
+// v59: turmas atendidas em cada ano (faixas iguais às da enturmação: idade completa até 31/03).
+export const FAIXAS_TURMA={2:'Maternal',3:'Jardim',4:'Pré I',5:'Pré II'};
+const TURNOS=['matutino','vespertino','integral','noturno'];
+function cleanTurmas(ano,list){
+ if(!Number.isInteger(ano)||ano<2020||ano>2100)deny('Ano inválido.',400);
+ if(!Array.isArray(list)||list.length>60)deny('Lista de turmas inválida (máximo 60 por ano).',400);
+ return list.map((t,i)=>{const faixa=Number(t?.faixa);if(!FAIXAS_TURMA[faixa])deny('Faixa de idade inválida.',400);
+  const vagas=t.vagas===''||t.vagas==null?null:Number(t.vagas);if(vagas!==null&&(!Number.isInteger(vagas)||vagas<0||vagas>99))deny('Número de vagas inválido.',400);
+  return {id:/^[a-z0-9-]{8,40}$/.test(String(t.id||''))?t.id:crypto.randomUUID(),faixa,nome:clip(t.nome,60)||FAIXAS_TURMA[faixa],turno:TURNOS.includes(t.turno)?t.turno:'',vagas,professor:clip(t.professor,160),sala:clip(t.sala,60),ordem:i}});
+}
+export function publicTurmas(p){
+ const all=p.turmas||{},atual=new Date().getFullYear();let anos=Object.keys(all).map(Number).filter(a=>a>=atual&&all[a]?.length).sort();
+ if(!anos.length){const ult=Object.keys(all).map(Number).filter(a=>all[a]?.length).sort().pop();if(ult)anos=[ult]}
+ if(!anos.length)return null;
+ const mostrar=p.turmasPublico||{professor:true,vagas:true};
+ return {anos:Object.fromEntries(anos.map(a=>[a,all[a].map(t=>({faixa:t.faixa,nome:t.nome,turno:t.turno,sala:t.sala,...(mostrar.vagas!==false&&t.vagas!=null?{vagas:t.vagas}:{}),...(mostrar.professor!==false&&t.professor?{professor:t.professor}:{})}))]))};
+}
+
 // v51: prestação de contas pública, calculada a partir dos lançamentos do Financeiro.
 export const CONTAS_PUB={SICOOB:'APP · Sicoob (recursos próprios)',PDDE_Basico:'PDDE Básico (Base)',PDDE_Qualidade:'PDDE Qualidade',Educacao_Conectada:'Educação Conectada',OUTRA:'Outros recursos'};
 function cleanTransparencia(input){return {contas:Object.keys(CONTAS_PUB).filter(k=>Array.isArray(input.contas)&&input.contas.includes(k)),detalhar:input.detalhar!==false}}
@@ -106,7 +124,7 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
  const path=new URL(request.url).pathname,method=request.method;
  if(path==='/api/session')return {role:user.role,email:user.email,signedIn:!!user.id};
  const data=user.data,p=data.portal||{members:[],requests:[],publicIds:[]};
- if(path==='/api/public/home'){const meta=p.publicMeta||{},todos=await listRecords(bucket);const materials=todos.filter(r=>!r.internal&&r.file&&p.publicIds.includes(r.id)).map(r=>({id:r.id,title:r.title,kind:r.kind,date:r.date||r.competence||'',category:PUBLIC_CATEGORIES.includes(meta[r.id]?.category)?meta[r.id].category:guessCategory(r),description:clip(meta[r.id]?.description,300),mime:r.file.mime,size:r.file.size}));return {info:{...DEFAULT_INFO,...(p.info||{})},notices:publicNotices(p).map(({id,title,body,date,until,pinned})=>({id,title,body,date,until,pinned:!!pinned})),materials,...publicEquipe(p),contas:publicContas(p,todos)}}
+ if(path==='/api/public/home'){const meta=p.publicMeta||{},todos=await listRecords(bucket);const materials=todos.filter(r=>!r.internal&&r.file&&p.publicIds.includes(r.id)).map(r=>({id:r.id,title:r.title,kind:r.kind,date:r.date||r.competence||'',category:PUBLIC_CATEGORIES.includes(meta[r.id]?.category)?meta[r.id].category:guessCategory(r),description:clip(meta[r.id]?.description,300),mime:r.file.mime,size:r.file.size}));return {info:{...DEFAULT_INFO,...(p.info||{})},notices:publicNotices(p).map(({id,title,body,date,until,pinned})=>({id,title,body,date,until,pinned:!!pinned})),materials,...publicEquipe(p),contas:publicContas(p,todos),turmas:publicTurmas(p)}}
  if(path==='/api/public/materials')return (await listRecords(bucket)).filter(r=>!r.internal&&p.publicIds.includes(r.id)).map(({id,title,kind,date,file})=>({id,title,kind,date,hasFile:!!file}));
  if(!['admin','teacher'].includes(user.role))deny();
  if(method==='GET'){
@@ -115,6 +133,7 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   if(path==='/api/portal/public-settings'){if(user.role!=='admin')deny();return {info:{...DEFAULT_INFO,...(p.info||{})},notices:publicNotices(p,true),meta:p.publicMeta||{},categories:PUBLIC_CATEGORIES};}
   if(path==='/api/portal/colegiados'){if(user.role!=='admin')deny();return colegiados(p);}
   if(path==='/api/portal/equipe'){if(user.role!=='admin')deny();return p.equipe||[];}
+  if(path==='/api/portal/turmas'){if(user.role!=='admin')deny();return {turmas:p.turmas||{},publico:p.turmasPublico||{professor:true,vagas:true}};}
   if(path==='/api/portal/transparencia'){if(user.role!=='admin')deny();return {...(p.transparencia||{contas:[],detalhar:true}),rotulos:CONTAS_PUB};}
   if(path==='/api/portal/requests')return p.requests.filter(r=>user.role==='admin'||r.email===user.email);
   deny('Não encontrado.',404);
@@ -151,6 +170,10 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
    const old=p.notices.find(n=>n.id===input.id);
    const notice={id:old?.id||crypto.randomUUID(),title,body,until,pinned:input.pinned===true,date:old?.date||todayBR(),updatedAt:new Date().toISOString(),by:user.email};
    p.notices=p.notices.filter(n=>n.id!==notice.id);p.notices.push(notice);if(p.notices.length>200)deny('Limite de avisos atingido. Exclua avisos antigos.',400)}
+ }else if(path==='/api/portal/turmas'){
+  if(user.role!=='admin')deny();p.turmas=p.turmas&&typeof p.turmas==='object'?p.turmas:{};
+  if(input.publico)p.turmasPublico={professor:input.publico.professor!==false,vagas:input.publico.vagas!==false};
+  if(input.ano!==undefined){const ano=Number(input.ano);if(input.delete===true)delete p.turmas[ano];else p.turmas[ano]=cleanTurmas(ano,input.turmas)}
  }else if(path==='/api/portal/transparencia'){
   if(user.role!=='admin')deny();p.transparencia=cleanTransparencia(input);
  }else if(path==='/api/portal/equipe'){

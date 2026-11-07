@@ -12,7 +12,7 @@
 <meta property="og:image:alt" content="Fachada do CEI Lindolpho José da Silva">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preload" as="image" href="/fachada.jpg">
-<link rel="stylesheet" href="public-home.css?v=a32e5a3e10">
+<link rel="stylesheet" href="public-home.css?v=9bc76a8934">
 </head>
 <body>
 <a class="skip" href="#conteudo">Ir para o conteúdo</a>
@@ -52,6 +52,13 @@
   </div></section>
 
   <section class="block tab-pane" data-tab="sobre" id="sobre" hidden><div class="wrap"><h2>Sobre o CEI</h2><div class="two" id="sobreGrid"></div></div></section>
+
+  <section class="block tab-pane" data-tab="turmas" id="turmas" hidden><div class="wrap">
+    <h2>Turmas</h2><p class="sub">Turmas atendidas pelo CEI e a faixa de nascimento de cada uma. A idade considerada é a completa até 31 de março do ano letivo.</p>
+    <div class="subtabs" id="turmasAnos" role="tablist" aria-label="Ano letivo"></div>
+    <form class="qual-turma" id="qualTurma" onsubmit="return false"><label for="qtNasc"><b>Em qual turma meu filho(a) fica?</b><small>Digite a data de nascimento</small></label><input id="qtNasc" type="date"><output id="qtRes" aria-live="polite"></output></form>
+    <div class="faixas" id="turmasLista"></div>
+  </div></section>
 
   <section class="block tab-pane" data-tab="contas" id="contas" hidden><div class="wrap">
     <h2>Prestação de contas</h2><p class="sub">Como os recursos da APP e dos programas federais são usados no CEI. Valores lançados pela direção a partir das notas fiscais e dos extratos bancários.</p>
@@ -128,6 +135,38 @@ function showSub(k) {
   document.querySelectorAll('#equipe .subpane').forEach(p => { p.hidden = p.dataset.sub !== k; });
 }
 document.getElementById('equipeTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { showSub(b.dataset.sub); history.replaceState(null, '', '#equipe-' + b.dataset.sub); } });
+/* ---------- Turmas (v59): mesma regra da enturmação — idade completa até 31/03 ---------- */
+const FAIXAS = [[2, 'Maternal', '#e0483b'], [3, 'Jardim', '#3b8fd9'], [4, 'Pré I', '#3f9a4b'], [5, 'Pré II', '#8a4fd6']];
+const TURNO = {matutino: 'Matutino', vespertino: 'Vespertino', integral: 'Integral', noturno: 'Noturno'};
+let turmasData = null, turmaAno = 0;
+const faixaNasc = (idade, ano) => ({de: `01/04/${ano - idade - 1}`, ate: `31/03/${ano - idade}`});
+function renderTurmas(d) {
+  if (d !== undefined) turmasData = d;
+  const t = turmasData; if (!t || !t.anos) return;
+  const anos = Object.keys(t.anos).map(Number).sort();
+  if (!anos.includes(turmaAno)) turmaAno = anos.includes(new Date().getFullYear()) ? new Date().getFullYear() : anos[0];
+  setDisp('turmas', true);
+  const bar = document.getElementById('turmasAnos');
+  bar.hidden = anos.length < 2;
+  bar.innerHTML = anos.map(a => `<button type="button" role="tab" class="${a === turmaAno ? 'on' : ''}" aria-selected="${a === turmaAno}" data-ano="${a}">Ano letivo ${a}</button>`).join('');
+  const lista = t.anos[turmaAno] || [];
+  document.getElementById('turmasLista').innerHTML = FAIXAS.map(([idade, nome, cor]) => { const ts = lista.filter(x => x.faixa === idade); if (!ts.length) return ''; const f = faixaNasc(idade, turmaAno);
+    const vagas = ts.filter(x => x.vagas != null).reduce((s, x) => s + x.vagas, 0), temVagas = ts.some(x => x.vagas != null);
+    return `<article class="faixa" style="--cor:${cor}"><header><h3>${nome}</h3><span>${ts.length} ${ts.length === 1 ? 'turma' : 'turmas'}</span></header>
+      <p class="nasc">Nascidos de <b>${f.de}</b> a <b>${f.ate}</b></p><p class="idade">${idade} anos completos até 31/03/${turmaAno}${temVagas ? ` · ${vagas} vagas` : ''}</p>
+      <ul>${ts.map(x => `<li><b>${safe(x.nome)}</b><span>${[TURNO[x.turno], x.sala, x.professor ? 'Prof. ' + x.professor : '', x.vagas != null ? x.vagas + ' vagas' : ''].filter(Boolean).map(safe).join(' · ')}</span></li>`).join('')}</ul></article>`; }).join('');
+  qualTurma();
+}
+function qualTurma() {
+  const v = document.getElementById('qtNasc').value, out = document.getElementById('qtRes');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { out.innerHTML = ''; return; }
+  const [y, m] = v.split('-').map(Number), ref = m > 3 ? y + 1 : y, idade = turmaAno - ref, f = FAIXAS.find(x => x[0] === idade);
+  const atendida = f && (turmasData.anos[turmaAno] || []).some(x => x.faixa === idade);
+  out.innerHTML = f ? `Em ${turmaAno}: <b style="color:${f[2]}">${f[1]}</b>${atendida ? '' : ' <small>(o CEI não tem turma desta faixa neste ano; procure a Secretaria de Educação)</small>'}`
+    : idade < 2 ? `Em ${turmaAno} a criança ainda não tem idade para o Maternal. Entra em <b>${ref + 2}</b>.` : `Em ${turmaAno} a criança já está na idade do <b>Ensino Fundamental</b>.`;
+}
+document.getElementById('turmasAnos').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { turmaAno = Number(b.dataset.ano); renderTurmas(); } });
+document.getElementById('qtNasc').addEventListener('input', qualTurma);
 const brl = c => (Number(c || 0) / 100).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
 const dbr = iso => iso ? iso.split('-').reverse().join('/') : '';
 let contasData = null, contasAno = '';
@@ -189,7 +228,7 @@ function renderInfo(i) {
   if (i.address) document.getElementById('footAddr').textContent = 'CEI Lindolpho José da Silva · ' + i.address;
 }
 /* ---------- Guias: cada uma mostra só o seu assunto ---------- */
-const TABS = [['inicio', 'Início', '🏠'], ['avisos', 'Avisos', '📣'], ['documentos', 'Documentos', '📄'], ['equipe', 'Equipe e colegiados', '👥'], ['contas', 'Prestação de contas', '💰'], ['sobre', 'Sobre', 'ℹ️'], ['contato', 'Contato', '📞']];
+const TABS = [['inicio', 'Início', '🏠'], ['avisos', 'Avisos', '📣'], ['documentos', 'Documentos', '📄'], ['turmas', 'Turmas', '🧸'], ['equipe', 'Equipe e colegiados', '👥'], ['contas', 'Prestação de contas', '💰'], ['sobre', 'Sobre', 'ℹ️'], ['contato', 'Contato', '📞']];
 const disp = {inicio: true, documentos: true, contato: true};
 let atual = '';
 function setDisp(id, on) { disp[id] = !!on; if (ready) { drawTabs(); if (!disp[atual]) show('inicio', false); } }
@@ -201,6 +240,7 @@ function drawTabs() {
 function resumo(id) {
   if (id === 'documentos') return materials.length ? `${materials.length} documento(s) público(s)` : 'Regimento, PPP, cardápio…';
   if (id === 'avisos') return 'Comunicados da direção';
+  if (id === 'turmas') return 'Turmas do ano e faixa de nascimento';
   if (id === 'equipe') return 'Professores, apoio, Conselho e APP';
   if (id === 'contas') return 'Recursos da APP e programas';
   if (id === 'sobre') return 'O CEI, vagas e matrículas';
@@ -218,7 +258,7 @@ function show(id, scroll = true) {
 }
 window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 fetch('/api/public/home', {cache: 'no-store'}).then(r => { if (!r.ok) throw Error(); return r.json(); }).then(d => {
-  materials = d.materials || []; renderNotices(d.notices || []); renderInfo(d.info || {}); renderEquipe(d); renderContas(d.contas); render();
+  materials = d.materials || []; renderNotices(d.notices || []); renderInfo(d.info || {}); renderEquipe(d); renderContas(d.contas); renderTurmas(d.turmas); render();
   ready = true; drawTabs(); show(location.hash.slice(1), false);
 }).catch(() => { document.getElementById('docs').innerHTML = '<div class="empty">Não foi possível carregar os documentos agora. Tente novamente em instantes.</div>'; ready = true; drawTabs(); show(location.hash.slice(1), false); });
 })();

@@ -1,0 +1,36 @@
+// v59: turmas atendidas por ano (registro pela administração e publicação).
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import worker from '../dist/server/index.js';
+import {DiskBucket} from './disk-bucket.mjs';
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cei-turmas-'));
+const env = {BUCKET: new DiskBucket(dir), AUTH_PROVIDER: 'chatgpt-sites', CEI_BOOTSTRAP_ADMIN_EMAIL: 'owner@example.org'};
+const origin = 'https://cei.test', admin = 'owner@example.org', teacher = 'prof@example.org';
+const call = (route, user = '', method = 'GET', body) => worker.fetch(new Request(origin + route, {method, headers: {Origin: origin, ...(user ? {'oai-authenticated-user-id': 'uid-' + user, 'oai-authenticated-user-email': user} : {}), ...(body ? {'Content-Type': 'application/json'} : {})}, ...(body ? {body: JSON.stringify(body)} : {})}), env);
+async function json(route, user, method, body, status = 200) { const r = await call(route, user, method, body); assert.equal(r.status, status, await r.clone().text()); return r.json(); }
+const ano = new Date().getFullYear();
+await json('/api/portal/members', admin, 'POST', {email: teacher, role: 'teacher', name: 'Prof'});
+assert.equal((await json('/api/public/home')).turmas, null, 'sem turmas registradas, nada público');
+const turmas = [{faixa: 2, nome: 'Maternal A', turno: 'matutino', vagas: 15, professor: 'Ana'}, {faixa: 2, nome: 'Maternal B', turno: 'vespertino', vagas: '', professor: ''}, {faixa: 4, nome: 'Pré I', turno: 'integral', vagas: 20, sala: 'Sala 3', extra: 'x'}];
+assert.equal((await call('/api/portal/turmas', teacher, 'POST', {ano, turmas})).status, 403);
+await json('/api/portal/turmas', admin, 'POST', {ano, turmas});
+await json('/api/portal/turmas', admin, 'POST', {ano: ano - 1, turmas: [{faixa: 3, nome: 'Jardim'}]});
+await json('/api/portal/turmas', admin, 'POST', {ano: ano + 1, turmas: [{faixa: 5, nome: 'Pré II A'}]});
+for (const [bad, msg] of [[{ano, turmas: [{faixa: 9}]}, 'faixa inválida'], [{ano: 1990, turmas: []}, 'ano inválido'], [{ano, turmas: [{faixa: 2, vagas: 500}]}, 'vagas inválidas']]) assert.equal((await call('/api/portal/turmas', admin, 'POST', bad)).status, 400, msg);
+const adm = await json('/api/portal/turmas', admin);
+assert.equal(adm.turmas[ano].length, 3); assert.equal(adm.turmas[ano][1].vagas, null); assert.equal(adm.turmas[ano][2].extra, undefined); assert.ok(adm.turmas[ano][0].id);
+let pub = (await json('/api/public/home')).turmas;
+assert.deepEqual(Object.keys(pub.anos).map(Number), [ano, ano + 1], 'público mostra ano atual e seguintes, não os passados');
+assert.deepEqual(pub.anos[ano][0], {faixa: 2, nome: 'Maternal A', turno: 'matutino', sala: '', vagas: 15, professor: 'Ana'});
+assert.ok(!('id' in pub.anos[ano][0]));
+await json('/api/portal/turmas', admin, 'POST', {publico: {professor: false, vagas: false}});
+pub = (await json('/api/public/home')).turmas;
+assert.equal(pub.anos[ano][0].professor, undefined); assert.equal(pub.anos[ano][0].vagas, undefined);
+await json('/api/portal/turmas', admin, 'POST', {ano, delete: true}); await json('/api/portal/turmas', admin, 'POST', {ano: ano + 1, delete: true});
+pub = (await json('/api/public/home')).turmas;
+assert.deepEqual(Object.keys(pub.anos).map(Number), [ano - 1], 'sem ano atual registrado, mostra o último registrado');
+assert.equal((await call('/api/portal/turmas', teacher)).status, 403);
+await fs.rm(dir, {recursive: true, force: true});
+console.log('PASS: turmas por ano (só administração, validação de faixa/ano/vagas, público com ano atual e seguintes, opções de esconder professor e vagas, exclusão de ano).');
