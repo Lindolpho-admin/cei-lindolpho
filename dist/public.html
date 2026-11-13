@@ -12,7 +12,7 @@
 <meta property="og:image:alt" content="Fachada do CEI Lindolpho José da Silva">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preload" as="image" href="/fachada.jpg">
-<link rel="stylesheet" href="public-home.css?v=9bc76a8934">
+<link rel="stylesheet" href="public-home.css?v=caa378e80d">
 </head>
 <body>
 <a class="skip" href="#conteudo">Ir para o conteúdo</a>
@@ -74,6 +74,11 @@
     <div class="subpane" data-sub="app" id="pubApp" hidden></div>
   </div></section>
 
+  <section class="block tab-pane" data-tab="links" id="links" hidden><div class="wrap">
+    <h2>Links úteis</h2><p class="sub">Sites e serviços indicados pelo CEI. Os links abrem em uma nova aba.</p>
+    <div class="links-grid" id="linksLista"></div>
+  </div></section>
+
   <section class="block tab-pane" data-tab="contato" id="contato" hidden><div class="wrap"><h2>Contato</h2><div class="two">
     <div class="card contact" id="contactCard"><h3>Fale com o CEI</h3><dl id="contactList"><div><dt>Telefone</dt><dd><a href="tel:+554734522185">(47) 3452-2185</a></dd></div></dl></div>
     <figure class="card fachada-contato"><img src="/fachada.jpg" alt="Fachada do CEI vista da entrada" loading="lazy" width="1000" height="538"><figcaption><b>Como nos encontrar</b>Prédio branco e azul com o nome do CEI na fachada. A entrada é pelo caminho coberto, ao lado do gramado.</figcaption></figure>
@@ -83,6 +88,7 @@
 
 <footer class="site"><div class="wrap"><span id="footAddr">CEI Lindolpho José da Silva · Araquari-SC</span><a href="/restrito?entrada=2">Área restrita da equipe</a></div></footer>
 
+<script src="link-icons.js?v=887a9a7fbe"></script>
 <script>
 (() => {
 const CATS = {
@@ -227,8 +233,14 @@ function renderInfo(i) {
   if (blocks.length === 1) document.getElementById('sobreGrid').style.gridTemplateColumns = '1fr';
   if (i.address) document.getElementById('footAddr').textContent = 'CEI Lindolpho José da Silva · ' + i.address;
 }
+function renderLinks(list) {
+  const I = window.LinkIcones; list = (list || []).filter(l => I && I.seguro(l.url));
+  setDisp('links', list.length > 0); if (!list.length) return;
+  document.getElementById('linksLista').innerHTML = list.map(l => { const sub = l.descricao || I.host(l.url);
+    return `<a class="link-card" href="${safe(I.seguro(l.url))}" target="_blank" rel="noopener noreferrer"><span class="link-ico" style="--c:${I.cor(l.cor)}">${I.svg(l.icone, 28)}</span><span class="link-txt"><b>${safe(l.titulo)}</b>${sub ? `<small>${safe(sub)}</small>` : ''}</span><span class="link-go" aria-hidden="true">↗</span></a>`; }).join('');
+}
 /* ---------- Guias: cada uma mostra só o seu assunto ---------- */
-const TABS = [['inicio', 'Início', '🏠'], ['avisos', 'Avisos', '📣'], ['documentos', 'Documentos', '📄'], ['turmas', 'Turmas', '🧸'], ['equipe', 'Equipe e colegiados', '👥'], ['contas', 'Prestação de contas', '💰'], ['sobre', 'Sobre', 'ℹ️'], ['contato', 'Contato', '📞']];
+const TABS = [['inicio', 'Início', '🏠'], ['avisos', 'Avisos', '📣'], ['documentos', 'Documentos', '📄'], ['turmas', 'Turmas', '🧸'], ['equipe', 'Equipe e colegiados', '👥'], ['contas', 'Prestação de contas', '💰'], ['links', 'Links úteis', '🔗'], ['sobre', 'Sobre', 'ℹ️'], ['contato', 'Contato', '📞']];
 const disp = {inicio: true, documentos: true, contato: true};
 let atual = '';
 function setDisp(id, on) { disp[id] = !!on; if (ready) { drawTabs(); if (!disp[atual]) show('inicio', false); } }
@@ -243,6 +255,7 @@ function resumo(id) {
   if (id === 'turmas') return 'Turmas do ano e faixa de nascimento';
   if (id === 'equipe') return 'Professores, apoio, Conselho e APP';
   if (id === 'contas') return 'Recursos da APP e programas';
+  if (id === 'links') return 'Sites e serviços indicados pelo CEI';
   if (id === 'sobre') return 'O CEI, vagas e matrículas';
   return 'Telefone, endereço e mapa';
 }
@@ -258,7 +271,7 @@ function show(id, scroll = true) {
 }
 window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 fetch('/api/public/home', {cache: 'no-store'}).then(r => { if (!r.ok) throw Error(); return r.json(); }).then(d => {
-  materials = d.materials || []; renderNotices(d.notices || []); renderInfo(d.info || {}); renderEquipe(d); renderContas(d.contas); renderTurmas(d.turmas); render();
+  materials = d.materials || []; renderNotices(d.notices || []); renderInfo(d.info || {}); renderEquipe(d); renderContas(d.contas); renderTurmas(d.turmas); renderLinks(d.links); render();
   ready = true; drawTabs(); show(location.hash.slice(1), false);
 }).catch(() => { document.getElementById('docs').innerHTML = '<div class="empty">Não foi possível carregar os documentos agora. Tente novamente em instantes.</div>'; ready = true; drawTabs(); show(location.hash.slice(1), false); });
 })();

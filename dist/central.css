@@ -262,3 +262,45 @@ button.cx-chip:hover{background:#dfe8f7}
 .cx-turma-grid{grid-template-columns:1fr!important}
 .cx-faixa .cx-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .cx-turma{min-width:0}.cx-turma label{min-width:0}.cx-turma input,.cx-turma select{min-width:0;width:100%}
+/* v60: Links úteis */
+.cx-links-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:14px}
+.cx-links-grid.compact{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:10px}
+.cx-link-card{background:#fff;border:1px solid var(--cx-line);border-radius:14px;padding:10px;display:grid;gap:8px;align-content:start}
+.cx-link-tile{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--cx-line);background:#fff;color:var(--cx-ink);text-decoration:none;min-width:0;position:relative;transition:.15s}
+.cx-link-card .cx-link-tile{border-color:transparent;background:var(--cx-soft)}
+a.cx-link-tile:hover{border-color:#b7cdf3;box-shadow:0 4px 14px rgba(23,34,53,.08);transform:translateY(-1px)}
+a.cx-link-tile:focus-visible{outline:3px solid #b7cdf3;outline-offset:2px}
+.cx-link-tile.off{opacity:.6}
+.cx-link-ico{flex:none;width:46px;height:46px;border-radius:12px;display:grid;place-items:center;color:#fff;background:var(--c,#1d5fb8);box-shadow:inset 0 -3px 0 rgba(0,0,0,.12)}
+.cx-links-grid.compact .cx-link-ico{width:40px;height:40px;border-radius:11px}
+.cx-link-txt{display:grid;gap:2px;min-width:0;padding-right:14px}
+.cx-link-txt b{font-size:14px;line-height:1.25}
+.cx-link-txt small{color:var(--cx-muted);font-size:12px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.cx-link-go{position:absolute;top:8px;right:10px;color:var(--cx-muted);font-size:12px}
+.cx-link-foot{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center}
+.cx-link-foot .cx-btns{gap:4px}
+.cx-links-convite{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.cx-links-convite div{flex:1;min-width:220px;display:grid;gap:2px}
+.cx-links-convite small{color:var(--cx-muted)}
+.cx-link-icones,.cx-link-cores,.cx-link-onde{border:1px solid var(--cx-line);border-radius:12px;padding:10px 12px;margin:0;min-width:0}
+.cx-link-icones legend,.cx-link-cores legend,.cx-link-onde legend{font-size:13px;font-weight:700;color:#344257;padding:0 4px}
+.cx-link-busca{width:100%;margin-bottom:8px}
+.cx-link-icon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px;max-height:230px;overflow:auto;padding:2px}
+.cx-link-icon-grid label{display:grid!important;justify-items:center;gap:3px;padding:7px 4px;border-radius:10px;border:1px solid transparent;cursor:pointer;font-weight:500!important;text-align:center}
+.cx-link-icon-grid label[hidden]{display:none!important}
+.cx-link-icon-grid label:hover{background:var(--cx-soft)}
+.cx-link-icon-grid input,.cx-link-cores input{position:absolute;opacity:0;pointer-events:none}
+.cx-link-icon-grid span{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:var(--cx-soft);color:#29497e}
+.cx-link-icon-grid small{font-size:10.5px;line-height:1.2;color:var(--cx-muted)}
+.cx-link-icon-grid label:has(input:checked){border-color:var(--cx-blue);background:#eef3fb}
+.cx-link-icon-grid label:has(input:checked) span{background:var(--cx-blue);color:#fff}
+.cx-link-icon-grid label:has(input:focus-visible){outline:2px solid #b7cdf3}
+.cx-link-cores{display:flex;flex-wrap:wrap;gap:8px}
+.cx-link-cores label{display:block!important;cursor:pointer}
+.cx-link-cores span{display:block;width:32px;height:32px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px var(--cx-line)}
+.cx-link-cores label:has(input:checked) span{box-shadow:0 0 0 3px var(--cx-ink)}
+.cx-link-cores label:has(input:focus-visible) span{outline:2px solid #b7cdf3;outline-offset:2px}
+.cx-link-onde{display:grid;gap:6px}
+.cx-link-prev{display:grid;gap:6px}
+.cx-link-prev small{font-weight:700;color:#344257}
+.cx-link-prev .cx-link-tile{max-width:340px}

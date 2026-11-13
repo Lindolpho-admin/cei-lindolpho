@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '59';
+const CX_VERSION = '60';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -197,7 +197,7 @@ function cxBuildNav() {
   frag.append(group('Colegiados'), make('colegiado', '◇ Conselho Escolar', {orgao: 'conselho'}), make('colegiado', '◉ APP', {orgao: 'app'}));
   frag.append(group('Secretaria'), make('equipe', '👥 Equipe da instituição'), make('turmas', '🏫 Turmas do ano'), make('enturmacao', '🎂 Ver enturmação'));
   if (esp) frag.append(esp); if (bib) frag.append(bib); if (solic) frag.append(solic);
-  frag.append(group('Sistema'), make('relatorios', '📊 Relatórios'), make('publica', '🌐 Página pública'));
+  frag.append(group('Sistema'), make('links', '🔗 Links úteis'), make('relatorios', '📊 Relatórios'), make('publica', '🌐 Página pública'));
   if (acessos) frag.append(acessos); if (seg) frag.append(seg);
   hidden.forEach(b => frag.append(b));
   nav.innerHTML = ''; nav.append(frag);
@@ -246,6 +246,7 @@ render = function () {
   if (CX_ADMIN && state.view === 'publica') { setHead('publica'); cxMarkActive(); return cxRenderPublic(a); }
   if (CX_ADMIN && state.view === 'turmas') { document.getElementById('title').textContent = 'Turmas do ano'; document.getElementById('subtitle').textContent = 'Quantas turmas o CEI atende em cada ano, por faixa de idade — aparece na página pública'; cxMarkActive(); return cxRenderTurmas(a); }
   if (CX_ADMIN && state.view === 'relatorios') { document.getElementById('title').textContent = 'Relatórios'; document.getElementById('subtitle').textContent = 'Listas prontas para consulta rápida, impressão (com o logotipo do CEI) ou planilha'; cxMarkActive(); return cxRenderRelatorios(a); }
+  if (CX_ADMIN && state.view === 'links') { document.getElementById('title').textContent = 'Links úteis'; document.getElementById('subtitle').textContent = 'Atalhos com ícone para sites e sistemas — também no Espaço do Professor e na página pública'; cxMarkActive(); return cxRenderLinks(a); }
   if (CX_ADMIN && state.view === 'equipe') { document.getElementById('title').textContent = 'Equipe da instituição'; document.getElementById('subtitle').textContent = 'Gestão, professores, administrativo e apoio — com foto para a página pública'; cxMarkActive(); return cxRenderEquipe(a); }
   if (CX_ADMIN && state.view === 'colegiado') { const o = CX_ORGAOS[cx.orgao] || CX_ORGAOS.conselho; document.getElementById('title').textContent = o.titulo; document.getElementById('subtitle').textContent = 'Composição atual, mandatos anteriores e documentos'; cxMarkActive(); return cxRenderColegiado(a); }
   if (CX_ADMIN && state.view === 'financeiro') { setHead('financeiro'); cxMarkActive(); return cxRenderFinance(a); }
@@ -271,8 +272,10 @@ function cxRenderDashboard(a) {
     <div class="cx-btns"><button class="cx-btn" onclick="cxOpenUpload()">⬆ Enviar documentos</button><button class="cx-btn" onclick="cxGo('atas')">✎ Redigir ata</button><button class="cx-btn" onclick="cxOpenUpload({kind:'nota_fiscal',area:'financeiro'})">🧾 Lançar nota fiscal</button><button class="cx-btn" onclick="cxOpenTimbrado('comunicado')">📄 Novo comunicado</button><button class="cx-btn" onclick="cxGoDecl()">🕒 Declaração de comparecimento</button><button class="cx-btn" onclick="newOficio()">✉ Novo ofício</button></div></section>
     <div class="cx-cols"><div class="panel" style="margin-top:0"><h2>Precisa de atenção</h2><ul class="cx-todo" id="cxTodo"><li class="muted">Carregando…</li></ul></div>
     <div class="panel" style="margin-top:0"><div class="cx-head"><h2>Saldos ${cxEsc(cx.finYear)}</h2><button class="cx-btn small" onclick="cxGo('financeiro')">Ver financeiro</button></div><div id="cxDashSaldos" class="muted">Carregando…</div></div></div>
+    <div id="cxLinksDash"></div>
     <div class="panel"><div class="cx-head"><h2>Enviados recentemente</h2><button class="cx-btn small" onclick="cxGo('arquivo',{})">Abrir arquivo</button></div><div id="cxRecent" class="muted">Carregando…</div></div>
     <div class="cx-stats"><div class="cx-stat"><small>Livros no acervo</small><b>${(state.books || []).length}</b></div><div class="cx-stat"><small>Empréstimos ativos</small><b>${(state.loans || []).filter(l => !l.returned).length}</b></div><div class="cx-stat"><small>Vagas na lista de espera</small><b>${(state.waitlist || []).length}</b></div><div class="cx-stat"><small>Documentos emitidos</small><b>${(state.generatedDocs || []).length + (state.oficios || []).length}</b></div><div class="cx-stat"><small>Arquivos no arquivo central</small><b id="cxStatFiles">…</b></div></div>`;
+  cxLinksBloco(document.getElementById('cxLinksDash'), 'Links úteis', `<button class="cx-btn small" onclick="cxGo('links')">Gerenciar links</button>`);
   cxLoad().then(() => {
     if (state.view !== 'dashboard') return;
     const todo = [];
@@ -1478,7 +1481,9 @@ function cxRenderTeacherHome(a) {
   const mine = cxTimbradoDocs().slice(0, 4);
   a.innerHTML = `<div class="cx-teacher-cards"><button onclick="cxGo('timbrado')"><span class="cx-ico">📄</span><b>Papel timbrado</b><small>Comunicados, bilhetes, autorizações, convites e atividades no padrão do CEI.</small></button><button onclick="cxGo('documentos')"><span class="cx-ico">📝</span><b>Relatórios e registros</b><small>Relatórios avaliativos e registros de prática alimentar.</small></button><button onclick="cxGo('biblioteca')"><span class="cx-ico">📚</span><b>Biblioteca</b><small>Consulte o acervo, peça livros e acompanhe seus empréstimos.</small></button></div>
     <div class="panel"><div class="cx-head"><h2>Criar agora</h2></div><div class="cx-models">${['comunicado', 'bilhete', 'autorizacao', 'atividade'].map(k => `<button class="cx-model" onclick="cxOpenTimbrado('${k}')"><span class="cx-ico">${CX_MODELS[k].ico}</span><b>${CX_MODELS[k].label}</b><small>${CX_MODELS[k].hint}</small></button>`).join('')}</div></div>
+    <div id="cxLinksProf"></div>
     ${mine.length ? `<div class="panel"><div class="cx-head"><h2>Últimos documentos</h2><button class="cx-btn small" onclick="cxGo('timbrado')">Ver todos</button></div><div style="margin-top:10px">${mine.map(g => `<article class="cx-item"><div><h4>${cxEsc(g.data?.title || g.name)}</h4><div class="cx-meta"><span>${cxEsc(cxBR(g.data?.date))}</span><span>${cxEsc(CX_MODELS[g.data?.model]?.label || '')}</span></div></div><div class="cx-actions"><button class="cx-btn small" onclick="previewGenerated('${g.id}')">Imprimir</button><button class="cx-btn small" onclick="cxOpenTimbrado(null,'${g.id}')">Editar</button></div></article>`).join('')}</div></div>` : ''}`;
+  cxLinksBloco(document.getElementById('cxLinksProf'), 'Links úteis');
 }
 
 /* ---------- Financeiro ---------- */
@@ -1753,6 +1758,87 @@ window.cxTurOutroAno = () => { const v = prompt('Qual ano deseja registrar?', St
 window.cxTurExcluir = async () => {
   if (!await cxConfirmTyped(`Turmas ${cxTur.ano}`, 'O registro das turmas deste ano sai da área restrita e da página pública.')) return;
   try { await cxRequest('/api/portal/turmas', {method: 'POST', body: JSON.stringify({ano: cxTur.ano, delete: true})}); notify('Registro excluído.'); render(); } catch (e) { notify(e.message); }
+};
+
+/* ---------- Links úteis (v60) ----------
+   Atalhos para sistemas e sites usados no dia a dia (Prefeitura, diário, formulários, Drive…).
+   O endereço, o nome, o ícone e a cor podem mudar a qualquer momento: quem usa o atalho continua clicando no mesmo ícone.
+   Cada link pode aparecer também no Espaço do Professor e na página pública. */
+const cxLinks = {lista: null};
+const cxLI = () => window.LinkIcones;
+async function cxLinksLoad(force) { if (!cxLinks.lista || force) cxLinks.lista = await cxRequest('/api/portal/links'); return cxLinks.lista; }
+function cxLinkTile(l, extra = '') {
+  const I = cxLI(), url = I.seguro(l.url), sub = l.descricao || I.host(l.url);
+  const body = `<span class="cx-link-ico" style="--c:${I.cor(l.cor)}">${I.svg(l.icone, 26)}</span><span class="cx-link-txt"><b>${cxEsc(l.titulo)}</b>${sub ? `<small>${cxEsc(sub)}</small>` : ''}</span>`;
+  return url ? `<a class="cx-link-tile" href="${cxEsc(url)}" target="_blank" rel="noopener noreferrer" title="Abrir ${cxEsc(l.titulo)} em nova aba"${extra}>${body}<span class="cx-link-go" aria-hidden="true">↗</span></a>` : `<span class="cx-link-tile off">${body}</span>`;
+}
+// Bloco de atalhos (Início da administração e do professor). Some quando não há links.
+async function cxLinksBloco(el, titulo, botao) {
+  if (!el) return;
+  try {
+    const lista = await cxLinksLoad(true); if (!document.body.contains(el)) return;
+    el.innerHTML = lista.length ? `<div class="panel"><div class="cx-head"><h2>${titulo}</h2>${botao || ''}</div><div class="cx-links-grid compact">${lista.map(l => cxLinkTile(l)).join('')}</div></div>` : (CX_ADMIN ? `<div class="panel cx-links-convite"><span class="cx-link-ico" style="--c:#1d5fb8">${cxLI().svg('link', 24)}</span><div><b>Links úteis</b><small>Guarde aqui os endereços que a equipe usa sempre (sistema da Prefeitura, diário, formulários, Drive). Quando um endereço mudar, é só editar.</small></div><button class="cx-btn small" onclick="cxGo('links')">Cadastrar links</button></div>` : '');
+  } catch { el.innerHTML = ''; }
+}
+async function cxRenderLinks(a) {
+  a.innerHTML = '<div class="panel" style="margin-top:0"><p class="muted">Carregando…</p></div>';
+  let lista; try { lista = await cxLinksLoad(true); } catch (e) { a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-empty">${cxEsc(e.message)}</div></div>`; return; }
+  if (state.view !== 'links') return;
+  const prof = lista.filter(l => l.professores).length, pub = lista.filter(l => l.publico).length;
+  a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-head"><div><h2>Links úteis</h2><p>Atalhos com ícone para os sites e sistemas usados no CEI. Clique no ícone para abrir. Quando o endereço de um sistema mudar, edite o link: o atalho continua no mesmo lugar para todos.</p></div>
+      <div class="cx-btns"><button class="cx-btn primary" onclick="cxLinkForm()">+ Novo link</button></div></div>
+      ${lista.length ? `<p class="hint" style="margin:8px 0 0">${lista.length} link(s) · ${prof} no Espaço do Professor · ${pub} na página pública${pub ? ' (<a href="/#links" target="_blank" rel="noopener">ver</a>)' : ''}</p>` : ''}</div>
+    ${lista.length ? `<div class="cx-links-grid">${lista.map((l, i) => `<article class="cx-link-card">${cxLinkTile(l)}
+      <div class="cx-link-foot"><div class="cx-chips"><span class="cx-chip">Área restrita</span>${l.professores ? '<span class="cx-chip ok">Professores</span>' : ''}${l.publico ? '<span class="cx-chip pub">Página pública</span>' : ''}</div>
+        <div class="cx-btns"><button class="cx-btn small" onclick="cxLinkMove('${l.id}',-1)" ${i ? '' : 'disabled'} aria-label="Mover para cima" title="Mover para cima">↑</button><button class="cx-btn small" onclick="cxLinkMove('${l.id}',1)" ${i < lista.length - 1 ? '' : 'disabled'} aria-label="Mover para baixo" title="Mover para baixo">↓</button><button class="cx-btn small" onclick="cxLinkForm('${l.id}')">✎ Editar</button><button class="cx-btn small danger" onclick="cxLinkDel('${l.id}')">Excluir</button></div></div></article>`).join('')}</div>`
+      : `<div class="panel"><div class="cx-empty">Nenhum link cadastrado. Clique em <b>+ Novo link</b> e cole o endereço do site (por exemplo, o sistema de ponto, o diário de classe ou o portal da Prefeitura).</div></div>`}`;
+}
+window.cxLinkForm = async id => {
+  const I = cxLI(), lista = await cxLinksLoad();
+  const l = id ? lista.find(x => x.id === id) : {icone: 'link', cor: 'azul', professores: true, publico: false};
+  if (!l) return notify('Link não encontrado. Recarregue a página.');
+  cxModal(`<h2>${id ? 'Editar link' : 'Novo link útil'}</h2>
+    <form class="cx-form cx-static-actions" id="cxLinkF" onsubmit="event.preventDefault();cxLinkSave('${id || ''}')" oninput="cxLinkPrev()" onchange="cxLinkPrev()">
+      <label class="full">Nome do link<input name="titulo" data-case="name" required maxlength="80" value="${cxEsc(l.titulo || '')}" placeholder="Ex.: Sistema de ponto da Prefeitura"></label>
+      <label class="full">Endereço (link)<input name="url" required maxlength="800" inputmode="url" autocomplete="off" spellcheck="false" value="${cxEsc(l.url || '')}" placeholder="Cole aqui: https://…"></label>
+      <label class="full">Descrição curta (opcional)<input name="descricao" maxlength="160" value="${cxEsc(l.descricao || '')}" placeholder="Ex.: Registro de frequência dos servidores"></label>
+      <fieldset class="full cx-link-icones"><legend>Ícone</legend><input type="search" class="cx-link-busca" placeholder="Procurar ícone: e-mail, cardápio, calendário, dinheiro…" aria-label="Procurar ícone" oninput="cxLinkBusca(this.value)" data-case="off">
+        <div class="cx-link-icon-grid" role="radiogroup">${Object.entries(I.ICONES).map(([k, ic]) => `<label title="${cxEsc(ic.n)}" data-k="${cxEsc(ic.n + ' ' + ic.k)}"><input type="radio" name="icone" value="${k}" ${l.icone === k ? 'checked' : ''}><span>${I.svg(k, 24)}</span><small>${cxEsc(ic.n)}</small></label>`).join('')}</div></fieldset>
+      <fieldset class="full cx-link-cores"><legend>Cor</legend>${Object.entries(I.CORES).map(([k, c]) => `<label title="${k}"><input type="radio" name="cor" value="${k}" ${l.cor === k ? 'checked' : ''}><span style="background:${c}"></span></label>`).join('')}</fieldset>
+      <fieldset class="full cx-link-onde"><legend>Onde aparece</legend>
+        <label class="cx-check"><input type="checkbox" checked disabled> Área restrita da administração (sempre)</label>
+        <label class="cx-check"><input type="checkbox" name="professores" ${l.professores ? 'checked' : ''}> Espaço do Professor</label>
+        <label class="cx-check"><input type="checkbox" name="publico" ${l.publico ? 'checked' : ''}> Página pública (qualquer pessoa, sem login)</label>
+        <p class="hint" style="margin:0">Na página pública, não coloque sistemas internos nem links com dados pessoais.</p></fieldset>
+      <div class="full cx-link-prev"><small>Como vai ficar</small><div id="cxLinkPrev"></div></div>
+      <p class="hint full" id="cxLinkErr" style="color:#b3261e" hidden></p>
+      <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar link</button></div></form>`);
+  cxLinkPrev();
+  const ch = document.querySelector('#cxLinkF input[name="icone"]:checked'); if (ch) ch.closest('label').scrollIntoView({block: 'nearest'});
+};
+const cxLinkDados = () => { const f = document.getElementById('cxLinkF'); if (!f) return null; const v = n => f.elements[n]; return {titulo: v('titulo').value.trim(), url: v('url').value.trim(), descricao: v('descricao').value.trim(), icone: f.querySelector('[name="icone"]:checked')?.value || 'link', cor: f.querySelector('[name="cor"]:checked')?.value || 'azul', professores: v('professores').checked, publico: v('publico').checked}; };
+window.cxLinkPrev = () => {
+  const d = cxLinkDados(), el = document.getElementById('cxLinkPrev'); if (!d || !el) return;
+  let u = d.url; if (u && !/^[a-z][a-z0-9+.-]*:/i.test(u)) u = /@/.test(u) ? 'mailto:' + u : 'https://' + u;
+  el.innerHTML = cxLinkTile({...d, titulo: d.titulo || 'Nome do link', url: u});
+};
+window.cxLinkBusca = q => { const w = cxNorm(q).trim(); document.querySelectorAll('.cx-link-icon-grid label').forEach(l => { l.hidden = !!w && !cxNorm(l.dataset.k).includes(w); }); };
+window.cxLinkSave = async id => {
+  const d = cxLinkDados(), err = document.getElementById('cxLinkErr');
+  try {
+    await cxRequest('/api/portal/links', {method: 'POST', body: JSON.stringify({link: {...d, id: id || undefined}})});
+    cxCloseModal(); notify(id ? 'Link atualizado.' : 'Link cadastrado.'); render();
+  } catch (e) { err.textContent = e.message; err.hidden = false; }
+};
+window.cxLinkDel = async id => {
+  const l = (cxLinks.lista || []).find(x => x.id === id); if (!l) return;
+  if (!confirm(`Excluir o link “${l.titulo}”? Ele sai da área restrita${l.professores ? ', do Espaço do Professor' : ''}${l.publico ? ' e da página pública' : ''}.`)) return;
+  try { await cxRequest('/api/portal/links', {method: 'POST', body: JSON.stringify({id, delete: true})}); notify('Link excluído.'); render(); } catch (e) { notify(e.message); }
+};
+window.cxLinkMove = async (id, dir) => {
+  const ids = (cxLinks.lista || []).map(l => l.id), i = ids.indexOf(id), j = i + dir; if (i < 0 || j < 0 || j >= ids.length) return;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  try { await cxRequest('/api/portal/links', {method: 'POST', body: JSON.stringify({ordem: ids})}); render(); } catch (e) { notify(e.message); }
 };
 
 /* ---------- Inicialização ---------- */

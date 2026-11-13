@@ -58,6 +58,27 @@ export function publicTurmas(p){
  return {anos:Object.fromEntries(anos.map(a=>[a,all[a].map(t=>({faixa:t.faixa,nome:t.nome,turno:t.turno,sala:t.sala,...(mostrar.vagas!==false&&t.vagas!=null?{vagas:t.vagas}:{}),...(mostrar.professor!==false&&t.professor?{professor:t.professor}:{})}))]))};
 }
 
+// v60: links úteis. A área restrita vê todos; o espaço do professor e a página pública veem só os marcados para eles.
+const CORES_LINK=['azul','verde','laranja','vermelho','roxo','turquesa','rosa','cinza'];
+export function linkUrl(v){
+ let u=String(v??'').trim();if(!u)deny('Informe o endereço do link.',400);
+ if(/^tel:/i.test(u)||/^\+?[\d\s().-]{8,}$/.test(u))u='tel:'+u.replace(/^tel:/i,'').replace(/[^\d+]/g,'');
+ if(/^[^\s@:\/]+@[^\s@]+\.[^\s@]+$/.test(u))u='mailto:'+u;
+ else if(!/^[a-z][a-z0-9+.-]*:/i.test(u))u='https://'+u.replace(/^\/+/,'');
+ let x;try{x=new URL(u)}catch{deny('Endereço inválido. Exemplo: https://www.araquari.sc.gov.br',400)}
+ if(!['http:','https:','mailto:','tel:'].includes(x.protocol))deny('Use um endereço que comece com https://, http://, mailto: ou tel:.',400);
+ if(x.protocol.startsWith('http')&&!/\./.test(x.hostname)&&x.hostname!=='localhost')deny('Endereço inválido. Confira o domínio (ex.: www.site.com.br).',400);
+ if(u.length>800)deny('Endereço longo demais (máximo 800 caracteres).',400);
+ return x.protocol.startsWith('http')?x.href:u;
+}
+function cleanLink(l,old,user){
+ const titulo=clip(l?.titulo,80);if(!titulo)deny('Informe o nome do link.',400);
+ return {id:old?.id||crypto.randomUUID(),titulo,url:linkUrl(l.url),descricao:clip(l.descricao,160),icone:/^[a-z0-9-]{1,30}$/.test(String(l.icone||''))?l.icone:'link',cor:CORES_LINK.includes(l.cor)?l.cor:'azul',
+  professores:l.professores===true,publico:l.publico===true,ordem:Number.isFinite(old?.ordem)?old.ordem:Number.isFinite(l.ordem)?l.ordem:9999,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
+}
+const ordenarLinks=list=>(list||[]).slice().sort((a,b)=>(a.ordem??0)-(b.ordem??0)||a.titulo.localeCompare(b.titulo,'pt-BR'));
+export function linksPara(p,quem){const all=ordenarLinks(p.links);if(quem==='admin')return all;return all.filter(l=>quem==='teacher'?l.professores:l.publico).map(({id,titulo,url,descricao,icone,cor})=>({id,titulo,url,descricao,icone,cor}))}
+
 // v51: prestação de contas pública, calculada a partir dos lançamentos do Financeiro.
 export const CONTAS_PUB={SICOOB:'APP · Sicoob (recursos próprios)',PDDE_Basico:'PDDE Básico (Base)',PDDE_Qualidade:'PDDE Qualidade',Educacao_Conectada:'Educação Conectada',OUTRA:'Outros recursos'};
 function cleanTransparencia(input){return {contas:Object.keys(CONTAS_PUB).filter(k=>Array.isArray(input.contas)&&input.contas.includes(k)),detalhar:input.detalhar!==false}}
@@ -124,7 +145,7 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
  const path=new URL(request.url).pathname,method=request.method;
  if(path==='/api/session')return {role:user.role,email:user.email,signedIn:!!user.id};
  const data=user.data,p=data.portal||{members:[],requests:[],publicIds:[]};
- if(path==='/api/public/home'){const meta=p.publicMeta||{},todos=await listRecords(bucket);const materials=todos.filter(r=>!r.internal&&r.file&&p.publicIds.includes(r.id)).map(r=>({id:r.id,title:r.title,kind:r.kind,date:r.date||r.competence||'',category:PUBLIC_CATEGORIES.includes(meta[r.id]?.category)?meta[r.id].category:guessCategory(r),description:clip(meta[r.id]?.description,300),mime:r.file.mime,size:r.file.size}));return {info:{...DEFAULT_INFO,...(p.info||{})},notices:publicNotices(p).map(({id,title,body,date,until,pinned})=>({id,title,body,date,until,pinned:!!pinned})),materials,...publicEquipe(p),contas:publicContas(p,todos),turmas:publicTurmas(p)}}
+ if(path==='/api/public/home'){const meta=p.publicMeta||{},todos=await listRecords(bucket);const materials=todos.filter(r=>!r.internal&&r.file&&p.publicIds.includes(r.id)).map(r=>({id:r.id,title:r.title,kind:r.kind,date:r.date||r.competence||'',category:PUBLIC_CATEGORIES.includes(meta[r.id]?.category)?meta[r.id].category:guessCategory(r),description:clip(meta[r.id]?.description,300),mime:r.file.mime,size:r.file.size}));return {info:{...DEFAULT_INFO,...(p.info||{})},notices:publicNotices(p).map(({id,title,body,date,until,pinned})=>({id,title,body,date,until,pinned:!!pinned})),materials,...publicEquipe(p),contas:publicContas(p,todos),turmas:publicTurmas(p),links:linksPara(p,'publico')}}
  if(path==='/api/public/materials')return (await listRecords(bucket)).filter(r=>!r.internal&&p.publicIds.includes(r.id)).map(({id,title,kind,date,file})=>({id,title,kind,date,hasFile:!!file}));
  if(!['admin','teacher'].includes(user.role))deny();
  if(method==='GET'){
@@ -135,6 +156,7 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   if(path==='/api/portal/equipe'){if(user.role!=='admin')deny();return p.equipe||[];}
   if(path==='/api/portal/turmas'){if(user.role!=='admin')deny();return {turmas:p.turmas||{},publico:p.turmasPublico||{professor:true,vagas:true}};}
   if(path==='/api/portal/transparencia'){if(user.role!=='admin')deny();return {...(p.transparencia||{contas:[],detalhar:true}),rotulos:CONTAS_PUB};}
+  if(path==='/api/portal/links')return linksPara(p,user.role);
   if(path==='/api/portal/requests')return p.requests.filter(r=>user.role==='admin'||r.email===user.email);
   deny('Não encontrado.',404);
  }
@@ -174,6 +196,14 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   if(user.role!=='admin')deny();p.turmas=p.turmas&&typeof p.turmas==='object'?p.turmas:{};
   if(input.publico)p.turmasPublico={professor:input.publico.professor!==false,vagas:input.publico.vagas!==false};
   if(input.ano!==undefined){const ano=Number(input.ano);if(input.delete===true)delete p.turmas[ano];else p.turmas[ano]=cleanTurmas(ano,input.turmas)}
+ }else if(path==='/api/portal/links'){
+  if(user.role!=='admin')deny();p.links=Array.isArray(p.links)?p.links:[];
+  if(input.delete===true)p.links=p.links.filter(l=>l.id!==input.id);
+  else if(Array.isArray(input.ordem)){input.ordem.forEach((id,i)=>{const l=p.links.find(x=>x.id===id);if(l)l.ordem=i})}
+  else{const old=p.links.find(l=>l.id===input.link?.id);if(input.link?.id&&!old)deny('Link não encontrado. Recarregue a página.',404);const link=cleanLink(input.link||{},old,user);
+   if(!old)link.ordem=p.links.reduce((m,l)=>Math.max(m,(l.ordem??0)+1),0);
+   p.links=p.links.filter(l=>l.id!==link.id);p.links.push(link)}
+  if(p.links.length>120)deny('Limite de 120 links. Exclua os que não usa mais.',400);
  }else if(path==='/api/portal/transparencia'){
   if(user.role!=='admin')deny();p.transparencia=cleanTransparencia(input);
  }else if(path==='/api/portal/equipe'){
