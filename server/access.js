@@ -58,6 +58,41 @@ export function publicTurmas(p){
  return {anos:Object.fromEntries(anos.map(a=>[a,all[a].map(t=>({faixa:t.faixa,nome:t.nome,turno:t.turno,sala:t.sala,...(mostrar.vagas!==false&&t.vagas!=null?{vagas:t.vagas}:{}),...(mostrar.professor!==false&&t.professor?{professor:t.professor}:{})}))]))};
 }
 
+// v61: banco de horas da equipe (somente administração).
+// Saldo positivo: o CEI deve horas à pessoa. Saldo negativo: a pessoa deve horas ao CEI.
+export const TIPOS_BANCO=['entrada','saida','saida_rapida','extra','compensacao','ajuste'];
+const HM=/^([01]\d|2[0-3]):[0-5]\d$/;
+const hmMin=v=>{const s=String(v??'').trim();if(!HM.test(s))return null;const[h,m]=s.split(':').map(Number);return h*60+m};
+const durMin=v=>{const m=String(v??'').trim().match(/^(\d{1,3})(?::([0-5]\d))?$/);return m?Number(m[1])*60+Number(m[2]||0):null};
+export function minutosBanco(r){
+ const a=hmMin(r.inicio),b=hmMin(r.fim),e=hmMin(r.escala),x=hmMin(r.real),intervalo=a!=null&&b!=null&&b>a?b-a:null;
+ switch(r.tipo){
+  case 'entrada':return e==null||x==null?null:e-x; // chegou antes da escala: ganha; atrasou: perde
+  case 'saida':return e==null||x==null?null:x-e; // saiu depois da escala: ganha; saiu mais cedo: perde
+  case 'saida_rapida':return intervalo==null?null:(r.abonado?0:-intervalo);
+  case 'extra':return intervalo;
+  case 'compensacao':case 'ajuste':{const d=intervalo??durMin(r.duracao);if(!d)return null;return r.sentido==='-'?-d:d}
+ }
+ return null;
+}
+const ERRO_BANCO={entrada:'Informe o horário da escala e o horário em que a pessoa chegou.',saida:'Informe o horário da escala e o horário em que a pessoa saiu.',saida_rapida:'Informe o horário em que a pessoa saiu e o horário em que voltou (a volta depois da saída).',extra:'Informe o início e o fim do trabalho extra (o fim depois do início).',compensacao:'Informe o horário de início e fim ou a duração (ex.: 2:30).',ajuste:'Informe a duração (ex.: 4:00).'};
+function cleanRegistroBanco(r,old,p,user){
+ const pessoa=(p.equipe||[]).find(e=>e.id===r?.pessoaId);if(!pessoa)deny('Escolha uma pessoa cadastrada em Equipe da instituição.',400);
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(String(r.data||''))||Number.isNaN(Date.parse(r.data+'T12:00:00Z')))deny('Informe a data.',400);
+ const tipo=TIPOS_BANCO.includes(r.tipo)?r.tipo:deny('Tipo de registro inválido.',400);
+ const h=v=>HM.test(String(v??'').trim())?String(v).trim():'';
+ const out={id:old?.id||crypto.randomUUID(),pessoaId:pessoa.id,pessoaNome:pessoa.nome,data:r.data,tipo,escala:'',real:'',inicio:'',fim:'',duracao:'',sentido:'',abonado:false,motivo:'',obs:clip(r.obs,300)};
+ if(tipo==='entrada'||tipo==='saida'){out.escala=h(r.escala);out.real=h(r.real)}
+ else{out.inicio=h(r.inicio);out.fim=h(r.fim)}
+ if(tipo==='compensacao'||tipo==='ajuste'){out.sentido=r.sentido==='-'?'-':'+';if(!(out.inicio&&out.fim))out.duracao=String(r.duracao??'').trim().slice(0,7)}
+ if(tipo==='ajuste'){out.inicio=out.fim=''}
+ if(tipo==='saida_rapida'){out.motivo=['consulta','pessoal','outro'].includes(r.motivo)?r.motivo:'pessoal';out.abonado=r.abonado===true}
+ const min=minutosBanco(out);if(min==null)deny(ERRO_BANCO[tipo],400);
+ if(Math.abs(min)>(tipo==='ajuste'||tipo==='compensacao'?999*60:16*60))deny('Diferença grande demais para um registro. Confira os horários.',400);
+ if(tipo==='ajuste'&&!out.obs)deny('Explique o ajuste em observações (ex.: saldo trazido da planilha de 2025).',400);
+ return {...out,minutos:min,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
+}
+function bancoHoras(p){const b=p.bancoHoras&&typeof p.bancoHoras==='object'?p.bancoHoras:{};return {escalas:b.escalas&&typeof b.escalas==='object'?b.escalas:{},registros:Array.isArray(b.registros)?b.registros:[]}}
 // v60: links úteis. A área restrita vê todos; o espaço do professor e a página pública veem só os marcados para eles.
 const CORES_LINK=['azul','verde','laranja','vermelho','roxo','turquesa','rosa','cinza'];
 export function linkUrl(v){
@@ -157,6 +192,7 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   if(path==='/api/portal/turmas'){if(user.role!=='admin')deny();return {turmas:p.turmas||{},publico:p.turmasPublico||{professor:true,vagas:true}};}
   if(path==='/api/portal/transparencia'){if(user.role!=='admin')deny();return {...(p.transparencia||{contas:[],detalhar:true}),rotulos:CONTAS_PUB};}
   if(path==='/api/portal/links')return linksPara(p,user.role);
+  if(path==='/api/portal/banco-horas'){if(user.role!=='admin')deny();return bancoHoras(p);}
   if(path==='/api/portal/requests')return p.requests.filter(r=>user.role==='admin'||r.email===user.email);
   deny('Não encontrado.',404);
  }
@@ -196,6 +232,16 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   if(user.role!=='admin')deny();p.turmas=p.turmas&&typeof p.turmas==='object'?p.turmas:{};
   if(input.publico)p.turmasPublico={professor:input.publico.professor!==false,vagas:input.publico.vagas!==false};
   if(input.ano!==undefined){const ano=Number(input.ano);if(input.delete===true)delete p.turmas[ano];else p.turmas[ano]=cleanTurmas(ano,input.turmas)}
+ }else if(path==='/api/portal/banco-horas'){
+  if(user.role!=='admin')deny();const b=p.bancoHoras=bancoHoras(p);
+  if(input.escala){const e=input.escala;if(!(p.equipe||[]).some(x=>x.id===e.pessoaId))deny('Pessoa não encontrada na equipe.',400);
+   const ent=String(e.entrada||'').trim(),sai=String(e.saida||'').trim();if((ent&&!HM.test(ent))||(sai&&!HM.test(sai)))deny('Horário da escala inválido.',400);
+   if(ent&&sai&&hmMin(sai)<=hmMin(ent))deny('Na escala, a saída deve ser depois da entrada.',400);
+   if(!ent&&!sai)delete b.escalas[e.pessoaId];else b.escalas[e.pessoaId]={entrada:ent,saida:sai,obs:clip(e.obs,120)}}
+  else if(input.delete===true)b.registros=b.registros.filter(r=>r.id!==input.id);
+  else{const old=b.registros.find(r=>r.id===input.registro?.id);if(input.registro?.id&&!old)deny('Registro não encontrado. Recarregue a página.',404);
+   const reg=cleanRegistroBanco(input.registro||{},old,p,user);b.registros=b.registros.filter(r=>r.id!==reg.id);b.registros.push(reg)}
+  if(b.registros.length>20000)deny('Limite de registros do banco de horas atingido.',400);
  }else if(path==='/api/portal/links'){
   if(user.role!=='admin')deny();p.links=Array.isArray(p.links)?p.links:[];
   if(input.delete===true)p.links=p.links.filter(l=>l.id!==input.id);

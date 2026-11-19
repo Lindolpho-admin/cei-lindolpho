@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '60';
+const CX_VERSION = '61';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -195,7 +195,7 @@ function cxBuildNav() {
   if (doc) frag.append(doc); frag.append(make('timbrado', '📄 Papel timbrado'));
   frag.append(group('Financeiro'), make('financeiro', '💰 Saldos e lançamentos'));
   frag.append(group('Colegiados'), make('colegiado', '◇ Conselho Escolar', {orgao: 'conselho'}), make('colegiado', '◉ APP', {orgao: 'app'}));
-  frag.append(group('Secretaria'), make('equipe', '👥 Equipe da instituição'), make('turmas', '🏫 Turmas do ano'), make('enturmacao', '🎂 Ver enturmação'));
+  frag.append(group('Secretaria'), make('equipe', '👥 Equipe da instituição'), make('banco', '⏱ Banco de horas'), make('turmas', '🏫 Turmas do ano'), make('enturmacao', '🎂 Ver enturmação'));
   if (esp) frag.append(esp); if (bib) frag.append(bib); if (solic) frag.append(solic);
   frag.append(group('Sistema'), make('links', '🔗 Links úteis'), make('relatorios', '📊 Relatórios'), make('publica', '🌐 Página pública'));
   if (acessos) frag.append(acessos); if (seg) frag.append(seg);
@@ -246,6 +246,7 @@ render = function () {
   if (CX_ADMIN && state.view === 'publica') { setHead('publica'); cxMarkActive(); return cxRenderPublic(a); }
   if (CX_ADMIN && state.view === 'turmas') { document.getElementById('title').textContent = 'Turmas do ano'; document.getElementById('subtitle').textContent = 'Quantas turmas o CEI atende em cada ano, por faixa de idade — aparece na página pública'; cxMarkActive(); return cxRenderTurmas(a); }
   if (CX_ADMIN && state.view === 'relatorios') { document.getElementById('title').textContent = 'Relatórios'; document.getElementById('subtitle').textContent = 'Listas prontas para consulta rápida, impressão (com o logotipo do CEI) ou planilha'; cxMarkActive(); return cxRenderRelatorios(a); }
+  if (CX_ADMIN && state.view === 'banco') { document.getElementById('title').textContent = 'Banco de horas'; document.getElementById('subtitle').textContent = 'Horas a receber e a repor de cada profissional, com o histórico de pagamentos'; cxMarkActive(); return cxRenderBanco(a); }
   if (CX_ADMIN && state.view === 'links') { document.getElementById('title').textContent = 'Links úteis'; document.getElementById('subtitle').textContent = 'Atalhos com ícone para sites e sistemas — também no Espaço do Professor e na página pública'; cxMarkActive(); return cxRenderLinks(a); }
   if (CX_ADMIN && state.view === 'equipe') { document.getElementById('title').textContent = 'Equipe da instituição'; document.getElementById('subtitle').textContent = 'Gestão, professores, administrativo e apoio — com foto para a página pública'; cxMarkActive(); return cxRenderEquipe(a); }
   if (CX_ADMIN && state.view === 'colegiado') { const o = CX_ORGAOS[cx.orgao] || CX_ORGAOS.conselho; document.getElementById('title').textContent = o.titulo; document.getElementById('subtitle').textContent = 'Composição atual, mandatos anteriores e documentos'; cxMarkActive(); return cxRenderColegiado(a); }
@@ -1127,6 +1128,16 @@ const CX_RELATORIOS = [
       const por = CX_EQ_CATS.map(([k]) => [cxEqCat(k), (cx.equipe || []).filter(e => e.categoria === k && (!o.grupo || k === o.grupo)).length]).filter(([, n]) => n);
       return {titulo: 'Equipe da instituição', colunas: [['grupo', 'Grupo'], ['nome', 'Nome'], ['funcao', 'Função'], ['vinculo', 'Vínculo'], ['atuacao', 'Atuação'], ...(o.contatos !== 'nao' ? [['telefone', 'Telefone'], ['email', 'E-mail']] : [])], linhas, pessoal: o.contatos !== 'nao', paisagem: o.contatos !== 'nao', manter: o.contatos !== 'nao' ? ['telefone', 'email'] : [],
         resumo: por.map(([g, n]) => `${g}: ${n}`).join(' · '), vazio: 'Nenhuma pessoa cadastrada em Equipe da instituição.'}; }},
+  {grupo: 'Pessoas', id: 'bancohoras', titulo: 'Banco de horas', desc: 'Saldo de cada profissional: quanto o CEI deve e quanto devem ao CEI.', icone: '⏱', load: ['banco'],
+    opcoes: [['grupo', 'Grupo', [['', 'Todos'], ...CX_EQ_CATS.map(([k]) => [k, cxEqCat(k)])]], ['quem', 'Mostrar', [['', 'Todos'], ['saldo', 'Só quem tem saldo'], ['pos', 'O CEI deve'], ['neg', 'Devem ao CEI']]]],
+    gerar: o => { const ps = cxBhPessoas().filter(p => (!o.grupo || p.categoria === o.grupo) && (!o.quem || (o.quem === 'saldo' ? p.saldo : o.quem === 'pos' ? p.saldo > 0 : p.saldo < 0))), regs = cxBhRegs();
+      const linhas = ps.map(p => { const pg = regs.filter(r => r.pessoaId === p.id && r.tipo === 'compensacao'); return {nome: p.nome, funcao: p.funcao, saldo: cxHorasS(p.saldo), situacao: cxBhSit(p.saldo), registros: p.n, pago: pg.length ? cxBR(pg[pg.length - 1].data) : '', ultimo: p.ult ? cxBR(p.ult) : ''}; });
+      const pos = ps.filter(p => p.saldo > 0).reduce((t, p) => t + p.saldo, 0), neg = ps.filter(p => p.saldo < 0).reduce((t, p) => t + p.saldo, 0);
+      return {titulo: 'Banco de horas — saldos', meta: [['Posição em', cxBR(cxToday())]], pessoal: true, colunas: [['nome', 'Nome'], ['funcao', 'Função'], ['saldo', 'Saldo', 'num'], ['situacao', 'Situação'], ['registros', 'Registros', 'num'], ['pago', 'Último pagamento'], ['ultimo', 'Último registro']], linhas,
+        resumo: `O CEI deve ${cxHoras(pos)} · devem ao CEI ${cxHoras(neg)}`, vazio: 'Ninguém para mostrar.'}; }},
+  {grupo: 'Pessoas', id: 'bancopagamentos', titulo: 'Pagamentos de horas', desc: 'Em que dias as horas foram pagas, por quem e quanto.', icone: '✅', load: ['banco'],
+    opcoes: [['ano', 'Ano', () => { const a = [...new Set(cxBhRegs().map(r => r.data.slice(0, 4)))].sort().reverse(); return (a.length ? a : [cxToday().slice(0, 4)]).map(x => [x, x]); }]],
+    gerar: o => { const regs = cxBhRegs().filter(r => r.tipo === 'compensacao' && r.data.startsWith(o.ano)); return cxBhRel(regs, 'Banco de horas — pagamentos de horas', [['Ano', o.ano]], true); }},
   {grupo: 'Pessoas', id: 'contatos', titulo: 'Agenda de contatos', desc: 'Equipe, Conselho e APP numa lista só, para ligar ou mandar mensagem.', icone: '📇', load: ['equipe', 'colegiados'], opcoes: [],
     gerar: () => { const m = new Map(), h = cxToday(), add = (nome, papel, tel, email) => { const k = cxNomeKey(nome); const x = m.get(k) || {nome, papeis: [], telefone: '', email: ''}; x.papeis.push(papel); x.telefone ||= tel || ''; x.email ||= email || ''; m.set(k, x); };
       for (const e of cx.equipe || []) add(e.nome, e.funcao, e.telefone, e.email);
@@ -1205,7 +1216,7 @@ const CX_RELATORIOS = [
 ];
 async function cxRelLoad(def) {
   const need = def.load || [];
-  await Promise.all([need.includes('turmas') && cxTurLoad(true), need.includes('colegiados') && cxLoadColegiados(true), need.includes('equipe') && cxLoadEquipe(true), (need.includes('records') || def.opcoes.some(o => typeof o[2] === 'function')) && cxLoad(true)].filter(Boolean));
+  await Promise.all([need.includes('turmas') && cxTurLoad(true), need.includes('colegiados') && cxLoadColegiados(true), need.includes('equipe') && cxLoadEquipe(true), need.includes('banco') && cxBancoLoad(), (need.includes('records') || def.opcoes.some(o => typeof o[2] === 'function')) && cxLoad(true)].filter(Boolean));
 }
 // Ordem alfabética que ignora pontuação e aspas no início (": a Bela…", "\"a Linha…\"").
 const cxCol = new Intl.Collator('pt-BR', {sensitivity: 'base', ignorePunctuation: true, numeric: true});
@@ -1758,6 +1769,239 @@ window.cxTurOutroAno = () => { const v = prompt('Qual ano deseja registrar?', St
 window.cxTurExcluir = async () => {
   if (!await cxConfirmTyped(`Turmas ${cxTur.ano}`, 'O registro das turmas deste ano sai da área restrita e da página pública.')) return;
   try { await cxRequest('/api/portal/turmas', {method: 'POST', body: JSON.stringify({ano: cxTur.ano, delete: true})}); notify('Registro excluído.'); render(); } catch (e) { notify(e.message); }
+};
+
+/* ---------- Banco de horas (v61) ----------
+   Pessoas vêm de Equipe da instituição. Cada registro gera um movimento em minutos:
+   positivo = a pessoa ganhou horas (o CEI passa a dever); negativo = a pessoa perdeu horas (passa a dever ao CEI).
+   O cálculo é o mesmo do servidor (server/access.js → minutosBanco), que é quem grava o valor final. */
+const cxBanco = {dados: null, aba: 'saldos', f: {q: '', cat: '', saldo: '', de: '', ate: '', tipo: '', pessoa: ''}};
+const CX_BH_TIPOS = {
+  entrada: {t: 'Chegada', i: '⏰', d: 'Chegou antes da escala (ganha) ou atrasou (perde).'},
+  saida: {t: 'Saída do dia', i: '🚪', d: 'Saiu depois da escala (ganha) ou mais cedo (perde).'},
+  saida_rapida: {t: 'Saída rápida', i: '🩺', d: 'Saiu e voltou no mesmo dia: consulta ou motivo pessoal (perde).'},
+  extra: {t: 'Trabalho extra', i: '➕', d: 'Reunião, evento ou atividade fora da escala (ganha).'},
+  compensacao: {t: 'Pagamento de horas', i: '✅', d: 'Quitação de horas: a pessoa repôs o que devia ou o CEI deu folga para pagar o que devia.'},
+  ajuste: {t: 'Saldo anterior / correção', i: '✎', d: 'Saldo trazido de outra planilha ou correção de lançamento.'},
+};
+const CX_BH_MOTIVO = {consulta: 'Consulta / saúde', pessoal: 'Motivo pessoal', outro: 'Outro'};
+const cxHmMin = v => { const m = String(v || '').match(/^(\d{2}):(\d{2})$/); return m ? +m[1] * 60 + +m[2] : null; };
+const cxDurMin = v => { const m = String(v || '').trim().match(/^(\d{1,3})(?::([0-5]\d))?$/); return m ? +m[1] * 60 + +(m[2] || 0) : null; };
+function cxBhMin(r) {
+  const a = cxHmMin(r.inicio), b = cxHmMin(r.fim), e = cxHmMin(r.escala), x = cxHmMin(r.real), iv = a != null && b != null && b > a ? b - a : null;
+  if (r.tipo === 'entrada') return e == null || x == null ? null : e - x;
+  if (r.tipo === 'saida') return e == null || x == null ? null : x - e;
+  if (r.tipo === 'saida_rapida') return iv == null ? null : (r.abonado ? 0 : -iv);
+  if (r.tipo === 'extra') return iv;
+  if (r.tipo === 'compensacao' || r.tipo === 'ajuste') { const d = iv ?? cxDurMin(r.duracao); return d ? (r.sentido === '-' ? -d : d) : null; }
+  return null;
+}
+// 90 → "1h30" · 30 → "30 min" · 120 → "2h"
+const cxHoras = m => { const a = Math.abs(Math.round(m || 0)), h = Math.floor(a / 60), mm = a % 60; return a === 0 ? '0' : h ? `${h}h${mm ? String(mm).padStart(2, '0') : ''}` : `${mm} min`; };
+const cxHorasS = m => (m > 0 ? '+' : m < 0 ? '−' : '') + cxHoras(m);
+const cxBhSit = m => m > 0 ? `O CEI deve ${cxHoras(m)}` : m < 0 ? `Deve ${cxHoras(m)} ao CEI` : 'Em dia';
+const cxBhCls = m => m > 0 ? 'pos' : m < 0 ? 'neg' : 'zero';
+const CX_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+const cxDiaSem = iso => { const d = new Date(iso + 'T12:00:00'); return Number.isNaN(d.getTime()) ? '' : CX_SEMANA[d.getDay()]; };
+async function cxBancoLoad() { const [, d] = await Promise.all([cxLoadEquipe(true), cxRequest('/api/portal/banco-horas')]); cxBanco.dados = d; return d; }
+const cxBhRegs = () => (cxBanco.dados?.registros || []).slice().sort((a, b) => a.data.localeCompare(b.data) || String(a.criadoEm).localeCompare(String(b.criadoEm)));
+function cxBhPessoas() {
+  const ord = Object.fromEntries(CX_EQ_CATS.map(([k], i) => [k, i])), regs = cxBanco.dados?.registros || [], m = new Map();
+  for (const e of cx.equipe || []) m.set(e.id, {id: e.id, nome: e.nome, funcao: e.funcao, categoria: e.categoria, saldo: 0, n: 0, ult: '', ativo: true});
+  for (const r of regs) { let p = m.get(r.pessoaId); if (!p) { p = {id: r.pessoaId, nome: r.pessoaNome || 'Pessoa removida', funcao: 'Não está mais na equipe', categoria: '', saldo: 0, n: 0, ult: '', ativo: false}; m.set(r.pessoaId, p); }
+    p.saldo += r.minutos || 0; p.n++; if (r.data > p.ult) p.ult = r.data; }
+  return [...m.values()].sort((a, b) => (b.ativo - a.ativo) || ((ord[a.categoria] ?? 9) - (ord[b.categoria] ?? 9)) || cxCol.compare(a.nome, b.nome));
+}
+const cxBhNome = id => cxBhPessoas().find(p => p.id === id)?.nome || '—';
+function cxBhDetalhe(r) {
+  const t = CX_BH_TIPOS[r.tipo]?.t || r.tipo;
+  if (r.tipo === 'entrada') return `${t}: escala ${r.escala}, chegou ${r.real}`;
+  if (r.tipo === 'saida') return `${t}: escala ${r.escala}, saiu ${r.real}`;
+  if (r.tipo === 'saida_rapida') return `${t} (${CX_BH_MOTIVO[r.motivo] || 'motivo pessoal'}): ${r.inicio}–${r.fim}${r.abonado ? ' · abonada' : ''}`;
+  if (r.tipo === 'extra') return `${t}: ${r.inicio}–${r.fim}`;
+  const per = r.inicio && r.fim ? `${r.inicio}–${r.fim}` : `${r.duracao}${/:/.test(r.duracao) ? '' : 'h'}`;
+  if (r.tipo === 'compensacao') return r.sentido === '-' ? `Pagamento de horas — o CEI pagou (folga/saída): ${per}` : `Pagamento de horas — a pessoa repôs: ${per}`;
+  return `${t}: ${per}`;
+}
+async function cxRenderBanco(a) {
+  a.innerHTML = '<div class="panel" style="margin-top:0"><p class="muted">Carregando…</p></div>';
+  try { await cxBancoLoad(); } catch (e) { a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-empty">${cxEsc(e.message)}</div></div>`; return; }
+  if (state.view !== 'banco') return;
+  const ps = cxBhPessoas(), f = cxBanco.f, regs = cxBhRegs();
+  const credor = ps.filter(p => p.saldo > 0), devedor = ps.filter(p => p.saldo < 0);
+  const ano = cxToday().slice(0, 4), pagos = regs.filter(r => r.tipo === 'compensacao' && r.data.startsWith(ano));
+  const sem = !(cx.equipe || []).length;
+  const tabs = [['saldos', 'Saldos por pessoa'], ['movimentos', 'Todos os registros'], ['pagamentos', 'Pagamentos de horas']];
+  a.innerHTML = `<div class="cx-bh-cards">
+      <div class="cx-bh-card pos"><small>O CEI deve aos profissionais</small><b>${cxHoras(credor.reduce((s, p) => s + p.saldo, 0))}</b><span>${credor.length} pessoa(s) com horas a receber</span></div>
+      <div class="cx-bh-card neg"><small>Os profissionais devem ao CEI</small><b>${cxHoras(devedor.reduce((s, p) => s + p.saldo, 0))}</b><span>${devedor.length} pessoa(s) com horas a repor</span></div>
+      <div class="cx-bh-card"><small>Horas pagas em ${ano}</small><b>${cxHoras(pagos.reduce((s, r) => s + Math.abs(r.minutos), 0))}</b><span>${pagos.length} pagamento(s) registrado(s)</span></div></div>
+    <div class="panel"><div class="cx-head"><div><h2>Banco de horas</h2><p>Registre chegadas, saídas, saídas rápidas, trabalho extra e pagamentos de horas. Quem trabalha além da escala ganha horas; quem sai antes ou se ausenta perde. As pessoas vêm de <a href="#" onclick="cxGo('equipe');return false">Equipe da instituição</a>.</p></div>
+      <div class="cx-btns"><button class="cx-btn primary" onclick="cxBhNovo()" ${sem ? 'disabled' : ''}>+ Registrar</button></div></div>
+      ${sem ? '<div class="cx-empty">Cadastre as pessoas em <b>Equipe da instituição</b> para começar o banco de horas.</div>' : `
+      <nav class="cx-subtabs" role="tablist">${tabs.map(([k, t]) => `<button role="tab" aria-selected="${cxBanco.aba === k}" class="${cxBanco.aba === k ? 'on' : ''}" onclick="cxBhAba('${k}')">${t}</button>`).join('')}</nav>
+      <div id="cxBhConteudo"></div>`}</div>`;
+  if (!sem) cxBhConteudo();
+}
+function cxBhConteudo() {
+  const el = document.getElementById('cxBhConteudo'); if (!el) return;
+  const f = cxBanco.f, ps = cxBhPessoas(), esc = cxBanco.dados?.escalas || {};
+  if (cxBanco.aba === 'saldos') {
+    const w = cxNorm(f.q).trim();
+    const lista = ps.filter(p => (!w || cxNorm(p.nome).includes(w)) && (!f.cat || p.categoria === f.cat) && (!f.saldo || (f.saldo === 'pos' ? p.saldo > 0 : f.saldo === 'neg' ? p.saldo < 0 : p.saldo === 0)));
+    el.innerHTML = `<div class="cx-bh-filtros"><input type="search" placeholder="Procurar pessoa…" aria-label="Procurar pessoa" value="${cxEsc(f.q)}" oninput="cxBhFiltro('q',this.value)">
+        <select aria-label="Grupo" onchange="cxBhFiltro('cat',this.value)"><option value="">Todos os grupos</option>${CX_EQ_CATS.map(([k]) => `<option value="${k}" ${f.cat === k ? 'selected' : ''}>${cxEsc(cxEqCat(k))}</option>`).join('')}</select>
+        <select aria-label="Situação" onchange="cxBhFiltro('saldo',this.value)"><option value="">Todas as situações</option><option value="pos" ${f.saldo === 'pos' ? 'selected' : ''}>O CEI deve</option><option value="neg" ${f.saldo === 'neg' ? 'selected' : ''}>Devem ao CEI</option><option value="zero" ${f.saldo === 'zero' ? 'selected' : ''}>Em dia</option></select></div>
+      ${lista.length ? `<div class="cx-table-wrap"><table class="cx-table cx-bh-table"><thead><tr><th>Pessoa</th><th>Escala</th><th class="num">Saldo</th><th>Situação</th><th>Último registro</th><th></th></tr></thead><tbody>${lista.map(p => { const e = esc[p.id];
+        return `<tr${p.ativo ? '' : ' class="cx-bh-ex"'}><td><b>${cxEsc(p.nome)}</b><br><small class="muted">${cxEsc(p.funcao || '')}</small></td>
+          <td>${p.ativo ? `<button class="cx-link-btn" onclick="cxBhEscala('${p.id}')" title="Definir escala de ${cxEsc(p.nome)}">${e && (e.entrada || e.saida) ? `${cxEsc(e.entrada || '—')} às ${cxEsc(e.saida || '—')}` : 'definir'}</button>${e?.obs ? `<br><small class="muted">${cxEsc(e.obs)}</small>` : ''}` : '—'}</td>
+          <td class="num"><span class="cx-bh-saldo ${cxBhCls(p.saldo)}">${cxHorasS(p.saldo)}</span></td><td>${cxBhSit(p.saldo)}</td><td>${p.ult ? cxBR(p.ult) : '<span class="muted">nenhum</span>'}</td>
+          <td class="cx-bh-acoes">${p.ativo ? `<button class="cx-btn small" onclick="cxBhNovo('${p.id}')">+ Registrar</button>` : ''}<button class="cx-btn small" onclick="cxBhExtrato('${p.id}')" ${p.n ? '' : 'disabled'}>Extrato</button></td></tr>`; }).join('')}</tbody></table></div>`
+        : '<div class="cx-empty">Ninguém encontrado com esses filtros.</div>'}`;
+    return;
+  }
+  const pagamentos = cxBanco.aba === 'pagamentos';
+  let regs = cxBhRegs().filter(r => (!pagamentos || r.tipo === 'compensacao') && (!f.pessoa || r.pessoaId === f.pessoa) && (!f.de || r.data >= f.de) && (!f.ate || r.data <= f.ate) && (pagamentos || !f.tipo || r.tipo === f.tipo)).reverse();
+  const tot = regs.reduce((s, r) => s + (r.minutos || 0), 0);
+  el.innerHTML = `<div class="cx-bh-filtros"><select aria-label="Pessoa" onchange="cxBhFiltro('pessoa',this.value)"><option value="">Todas as pessoas</option>${ps.map(p => `<option value="${p.id}" ${f.pessoa === p.id ? 'selected' : ''}>${cxEsc(p.nome)}</option>`).join('')}</select>
+      ${pagamentos ? '' : `<select aria-label="Tipo" onchange="cxBhFiltro('tipo',this.value)"><option value="">Todos os tipos</option>${Object.entries(CX_BH_TIPOS).map(([k, v]) => `<option value="${k}" ${f.tipo === k ? 'selected' : ''}>${v.t}</option>`).join('')}</select>`}
+      <label>De<input type="date" value="${cxEsc(f.de)}" onchange="cxBhFiltro('de',this.value)"></label><label>Até<input type="date" value="${cxEsc(f.ate)}" onchange="cxBhFiltro('ate',this.value)"></label>
+      <button class="cx-btn small" onclick="cxBhImprimirLista()" ${regs.length ? '' : 'disabled'}>🖨 Imprimir</button></div>
+    ${pagamentos ? `<p class="hint">Dias em que horas foram pagas: <b>+</b> quando a pessoa repôs horas que devia ao CEI; <b>−</b> quando o CEI pagou horas que devia (folga ou saída antecipada combinada).</p>` : ''}
+    ${regs.length ? `<p class="hint">${regs.length} registro(s) · soma no período: <b class="cx-bh-saldo ${cxBhCls(tot)}">${cxHorasS(tot)}</b></p>${cxBhTabela(regs, true)}` : `<div class="cx-empty">${pagamentos ? 'Nenhum pagamento de horas registrado nesse período.' : 'Nenhum registro nesse período.'}</div>`}`;
+}
+function cxBhTabela(regs, comPessoa, acumulado) {
+  return `<div class="cx-table-wrap"><table class="cx-table cx-bh-table"><thead><tr><th>Data</th>${comPessoa ? '<th>Pessoa</th>' : ''}<th>Registro</th><th>Observação</th><th class="num">Movimento</th>${acumulado ? '<th class="num">Saldo</th>' : ''}<th></th></tr></thead><tbody>${regs.map(r => `<tr${r.tipo === 'compensacao' ? ' class="cx-bh-pago"' : ''}>
+    <td>${cxBR(r.data)} <small class="muted">${cxDiaSem(r.data)}</small></td>${comPessoa ? `<td>${cxEsc(cxBhNome(r.pessoaId))}</td>` : ''}<td><span aria-hidden="true">${CX_BH_TIPOS[r.tipo]?.i || ''}</span> ${cxEsc(cxBhDetalhe(r))}</td><td>${cxEsc(r.obs || '')}</td>
+    <td class="num"><span class="cx-bh-saldo ${cxBhCls(r.minutos)}">${cxHorasS(r.minutos)}</span></td>${acumulado ? `<td class="num">${cxHorasS(acumulado.get(r.id))}</td>` : ''}
+    <td class="cx-bh-acoes"><button class="cx-btn small" onclick="cxBhForm('${r.id}')" aria-label="Editar registro">✎</button><button class="cx-btn small danger" onclick="cxBhDel('${r.id}')" aria-label="Excluir registro">✕</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+window.cxBhAba = k => { cxBanco.aba = k; cxBanco.extrato = null; render(); };
+window.cxBhFiltro = (k, v) => { cxBanco.f[k] = v; if (k === 'q') { clearTimeout(cxBanco.t); cxBanco.t = setTimeout(() => { cxBhConteudo(); const i = document.querySelector('.cx-bh-filtros input[type=search]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 200); } else cxBhConteudo(); };
+window.cxBhForm = (id, pessoaId) => {
+  const r = id ? (cxBanco.dados?.registros || []).find(x => x.id === id) : null; if (id && !r) return notify('Registro não encontrado.');
+  const ativos = cxBhPessoas().filter(p => p.ativo || p.id === r?.pessoaId), ult = cxBanco.ultimo || {};
+  const v = r || {pessoaId: pessoaId || '', data: ult.data || cxToday(), tipo: 'saida', sentido: '+', motivo: 'consulta'};
+  const grupos = CX_EQ_CATS.map(([k]) => [k, ativos.filter(p => p.categoria === k)]).filter(([, l]) => l.length);
+  const outros = ativos.filter(p => !CX_EQ_CATS.some(([k]) => k === p.categoria));
+  const opt = p => `<option value="${p.id}" ${v.pessoaId === p.id ? 'selected' : ''}>${cxEsc(p.nome)}</option>`;
+  cxModal(`<h2>${r ? 'Editar registro' : 'Registrar no banco de horas'}</h2>
+    <form class="cx-form cx-static-actions cx-bh-form" id="cxBhF" onsubmit="event.preventDefault();cxBhSalvar('${r?.id || ''}')" oninput="cxBhPrev()" onchange="cxBhPrev()">
+      <label>Pessoa<select name="pessoaId" required onchange="cxBhPessoaMudou()"><option value="">Escolha…</option>${grupos.map(([k, l]) => `<optgroup label="${cxEsc(cxEqCat(k))}">${l.map(opt).join('')}</optgroup>`).join('')}${outros.length ? `<optgroup label="Outros">${outros.map(opt).join('')}</optgroup>` : ''}</select></label>
+      <label>Data<input type="date" name="data" required value="${cxEsc(v.data)}"></label>
+      <fieldset class="full cx-bh-tipos"><legend>O que aconteceu?</legend>${Object.entries(CX_BH_TIPOS).map(([k, t]) => `<label><input type="radio" name="tipo" value="${k}" ${v.tipo === k ? 'checked' : ''} onchange="cxBhTipo()"><span><b><span aria-hidden="true">${t.i}</span> ${t.t}</b><small>${t.d}</small></span></label>`).join('')}</fieldset>
+      <div class="full cx-bh-campos" data-para="entrada saida">
+        <label>Horário da escala<input type="time" name="escala" value="${cxEsc(v.escala || '')}"><small class="hint" id="cxBhEscHint"></small></label>
+        <label><span data-txt-entrada>Chegou às</span><span data-txt-saida>Saiu às</span><input type="time" name="real" value="${cxEsc(v.real || '')}"></label></div>
+      <div class="full cx-bh-campos" data-para="saida_rapida extra compensacao">
+        <label><span data-txt-saida_rapida>Saiu às</span><span data-txt-extra data-txt-compensacao>Início</span><input type="time" name="inicio" value="${cxEsc(v.inicio || '')}"></label>
+        <label><span data-txt-saida_rapida>Voltou às</span><span data-txt-extra data-txt-compensacao>Fim</span><input type="time" name="fim" value="${cxEsc(v.fim || '')}"></label>
+        <label data-para="compensacao">Ou a duração<input name="duracao" placeholder="Ex.: 2:30 ou 8" inputmode="numeric" data-case="off" value="${cxEsc(v.duracao || '')}"></label></div>
+      <div class="full cx-bh-campos" data-para="ajuste"><label>Duração<input name="duracao2" placeholder="Ex.: 12:30" inputmode="numeric" data-case="off" value="${cxEsc(v.tipo === 'ajuste' ? v.duracao || '' : '')}"></label></div>
+      <fieldset class="full cx-bh-opcoes" data-para="saida_rapida"><legend>Motivo</legend>${Object.entries(CX_BH_MOTIVO).map(([k, t]) => `<label class="cx-check"><input type="radio" name="motivo" value="${k}" ${(v.motivo || 'consulta') === k ? 'checked' : ''}> ${t}</label>`).join('')}
+        <label class="cx-check"><input type="checkbox" name="abonado" ${v.abonado ? 'checked' : ''}> Abonar (com atestado ou declaração: não desconta do banco)</label></fieldset>
+      <fieldset class="full cx-bh-opcoes" data-para="compensacao"><legend>Quem pagou?</legend>
+        <label class="cx-check"><input type="radio" name="sentido" value="+" ${v.sentido !== '-' ? 'checked' : ''}> A pessoa repôs horas que devia ao CEI <b>(soma ao banco)</b></label>
+        <label class="cx-check"><input type="radio" name="sentido" value="-" ${v.sentido === '-' ? 'checked' : ''}> O CEI pagou horas que devia à pessoa: folga ou saída antecipada <b>(retira do banco)</b></label></fieldset>
+      <fieldset class="full cx-bh-opcoes" data-para="ajuste"><legend>Direção</legend>
+        <label class="cx-check"><input type="radio" name="sentido2" value="+" ${v.sentido !== '-' ? 'checked' : ''}> O CEI deve essas horas à pessoa</label>
+        <label class="cx-check"><input type="radio" name="sentido2" value="-" ${v.sentido === '-' ? 'checked' : ''}> A pessoa deve essas horas ao CEI</label></fieldset>
+      <label class="full">Observação<textarea name="obs" rows="2" maxlength="300" placeholder="Ex.: reunião pedagógica; consulta médica; combinado com a direção">${cxEsc(v.obs || '')}</textarea></label>
+      <div class="full cx-bh-prev" id="cxBhPrev" aria-live="polite"></div>
+      <p class="hint full" id="cxBhErr" style="color:#b3261e" hidden></p>
+      <div class="actions full"><button type="button" onclick="cxBhCancelar()">Cancelar</button>${r ? '' : '<button type="button" onclick="cxBhSalvar(\'\',true)">Salvar e registrar outro</button>'}<button class="primary" type="submit">Salvar</button></div></form>`);
+  document.getElementById('cxBhF').dataset.id = r?.id || '';
+  cxBhTipo(true);
+};
+window.cxBhCancelar = () => cxBanco.extrato ? cxBhExtrato(cxBanco.extrato) : cxCloseModal();
+window.cxBhNovo = pid => { cxBanco.extrato = null; cxBhForm(null, pid || ''); };
+window.cxBhFecharExtrato = () => { cxBanco.extrato = null; cxCloseModal(); };
+const cxBhDados = () => { const f = document.getElementById('cxBhF'); if (!f) return null; const e = f.elements, sel = n => f.querySelector(`[name="${n}"]:checked`)?.value;
+  const tipo = sel('tipo') || 'saida', aj = tipo === 'ajuste';
+  return {pessoaId: e.pessoaId.value, data: e.data.value, tipo, escala: e.escala.value, real: e.real.value, inicio: e.inicio.value, fim: e.fim.value, duracao: aj ? e.duracao2.value : e.duracao.value, sentido: aj ? sel('sentido2') : sel('sentido'), motivo: sel('motivo'), abonado: e.abonado.checked, obs: e.obs.value.trim()}; };
+window.cxBhTipo = inicial => {
+  const f = document.getElementById('cxBhF'); if (!f) return; const t = cxBhDados().tipo;
+  f.querySelectorAll('[data-para]').forEach(el => { el.hidden = !el.dataset.para.split(' ').includes(t); });
+  f.querySelectorAll('[data-txt-entrada],[data-txt-saida],[data-txt-saida_rapida],[data-txt-extra],[data-txt-compensacao]').forEach(el => { el.hidden = !el.hasAttribute('data-txt-' + t); });
+  cxBhPessoaMudou(inicial === true ? 'manter' : 'tipo');
+  cxBhPrev();
+};
+// Preenche o horário da escala com a escala padrão da pessoa (entrada ou saída, conforme o tipo).
+window.cxBhPessoaMudou = modo => {
+  const f = document.getElementById('cxBhF'); if (!f) return; const d = cxBhDados(), e = (cxBanco.dados?.escalas || {})[d.pessoaId], hint = document.getElementById('cxBhEscHint');
+  const padrao = d.tipo === 'entrada' ? e?.entrada : d.tipo === 'saida' ? e?.saida : '';
+  if (padrao && !(modo === 'manter' && f.elements.escala.value)) f.elements.escala.value = padrao;
+  if (hint) hint.textContent = e && (e.entrada || e.saida) ? `Escala padrão: ${e.entrada || '—'} às ${e.saida || '—'}` : (d.pessoaId ? 'Sem escala padrão cadastrada.' : '');
+  if (!modo) cxBhPrev();
+};
+window.cxBhPrev = () => {
+  const d = cxBhDados(), el = document.getElementById('cxBhPrev'); if (!d || !el) return;
+  const m = cxBhMin(d), atual = cxBhPessoas().find(p => p.id === d.pessoaId);
+  if (m == null || !atual) { el.innerHTML = '<span class="muted">Preencha os horários para ver o resultado.</span>'; return; }
+  const old = (cxBanco.dados?.registros || []).find(r => r.id === document.getElementById('cxBhF').dataset.id);
+  const novo = atual.saldo - (old && old.pessoaId === d.pessoaId ? old.minutos : 0) + m;
+  el.innerHTML = `<span>Resultado deste registro: <b class="cx-bh-saldo ${cxBhCls(m)}">${cxHorasS(m)}</b>${m > 0 ? ' (ganha horas)' : m < 0 ? ' (perde horas)' : d.abonado ? ' (abonado)' : ''}</span><span>Saldo de ${cxEsc(atual.nome.split(' ')[0])} depois: <b class="cx-bh-saldo ${cxBhCls(novo)}">${cxHorasS(novo)}</b> · ${cxBhSit(novo)}</span>`;
+};
+window.cxBhSalvar = async (id, outro) => {
+  const d = cxBhDados(), err = document.getElementById('cxBhErr');
+  if (!d.pessoaId) { err.textContent = 'Escolha a pessoa.'; err.hidden = false; return; }
+  try {
+    await cxRequest('/api/portal/banco-horas', {method: 'POST', body: JSON.stringify({registro: {...d, id: id || undefined}})});
+    cxBanco.ultimo = {data: d.data}; notify(id ? 'Registro atualizado.' : 'Registro salvo no banco de horas.');
+    await cxBancoLoad();
+    if (outro) { cxBhForm(null, ''); const f = document.getElementById('cxBhF'); f.querySelector(`[name="tipo"][value="${d.tipo}"]`).checked = true; cxBhTipo(); f.elements.pessoaId.focus(); }
+    else { cxCloseModal(); if (cxBanco.extrato) cxBhExtrato(cxBanco.extrato); }
+    cxBhRefresh();
+  } catch (e) { err.textContent = e.message; err.hidden = false; }
+};
+// Atualiza a tela por trás (a janela aberta fica onde está).
+function cxBhRefresh() { if (state.view === 'banco') render(); }
+window.cxBhDel = async id => {
+  const r = (cxBanco.dados?.registros || []).find(x => x.id === id); if (!r) return;
+  if (!confirm(`Excluir este registro de ${cxBhNome(r.pessoaId)} (${cxBR(r.data)}, ${cxHorasS(r.minutos)})? O saldo será recalculado.`)) return;
+  try { await cxRequest('/api/portal/banco-horas', {method: 'POST', body: JSON.stringify({id, delete: true})}); notify('Registro excluído.'); await cxBancoLoad(); if (cxBanco.extrato) cxBhExtrato(cxBanco.extrato); cxBhRefresh(); } catch (e) { notify(e.message); }
+};
+window.cxBhEscala = id => {
+  const p = cxBhPessoas().find(x => x.id === id), e = (cxBanco.dados?.escalas || {})[id] || {}; if (!p) return;
+  cxModal(`<h2>Escala de ${cxEsc(p.nome)}</h2><p class="hint">Horário normal de trabalho. Ele é sugerido ao registrar chegadas e saídas; pode ser alterado em cada registro.</p>
+    <form class="cx-form cx-static-actions" id="cxBhEsc" onsubmit="event.preventDefault();cxBhEscSalvar('${id}')">
+      <label>Entrada<input type="time" name="entrada" value="${cxEsc(e.entrada || '')}"></label><label>Saída<input type="time" name="saida" value="${cxEsc(e.saida || '')}"></label>
+      <label class="full">Observação (opcional)<input name="obs" maxlength="120" value="${cxEsc(e.obs || '')}" placeholder="Ex.: 40 h semanais; hora-atividade na quarta à tarde"></label>
+      <p class="hint full" id="cxBhEscErr" style="color:#b3261e" hidden></p>
+      <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar escala</button></div></form>`);
+};
+window.cxBhEscSalvar = async id => {
+  const f = document.getElementById('cxBhEsc').elements;
+  try { await cxRequest('/api/portal/banco-horas', {method: 'POST', body: JSON.stringify({escala: {pessoaId: id, entrada: f.entrada.value, saida: f.saida.value, obs: f.obs.value.trim()}})}); cxCloseModal(); notify('Escala salva.'); render(); }
+  catch (e) { const er = document.getElementById('cxBhEscErr'); er.textContent = e.message; er.hidden = false; }
+};
+window.cxBhExtrato = id => {
+  const p = cxBhPessoas().find(x => x.id === id); if (!p) return; cxBanco.extrato = id;
+  const regs = cxBhRegs().filter(r => r.pessoaId === id), acc = new Map(); let s = 0; for (const r of regs) { s += r.minutos || 0; acc.set(r.id, s); }
+  const pagos = regs.filter(r => r.tipo === 'compensacao');
+  const m = cxModal(`<div class="cx-head"><div><h2>Extrato de ${cxEsc(p.nome)}</h2><p>${cxEsc(p.funcao || '')}</p></div><div class="cx-btns">${p.ativo ? `<button class="cx-btn primary" onclick="cxBhForm(null,'${id}')">+ Registrar</button>` : ''}<button class="cx-btn" onclick="cxBhImprimirExtrato('${id}')">🖨 Imprimir</button></div></div>
+    <div class="cx-bh-cards mini"><div class="cx-bh-card ${cxBhCls(p.saldo)}"><small>Saldo atual</small><b>${cxHorasS(p.saldo)}</b><span>${cxBhSit(p.saldo)}</span></div>
+      <div class="cx-bh-card"><small>Ganhou</small><b>${cxHoras(regs.filter(r => r.minutos > 0 && r.tipo !== 'compensacao').reduce((t, r) => t + r.minutos, 0))}</b><span>chegadas, saídas e extras</span></div>
+      <div class="cx-bh-card"><small>Perdeu</small><b>${cxHoras(regs.filter(r => r.minutos < 0 && r.tipo !== 'compensacao').reduce((t, r) => t + r.minutos, 0))}</b><span>atrasos, saídas e ausências</span></div>
+      <div class="cx-bh-card"><small>Pagamentos de horas</small><b>${pagos.length}</b><span>${pagos.length ? 'último em ' + cxBR(pagos[pagos.length - 1].data) : 'nenhum'}</span></div></div>
+    ${regs.length ? cxBhTabela(regs.slice().reverse(), false, acc) : '<div class="cx-empty">Nenhum registro.</div>'}
+    <div class="actions"><button type="button" onclick="cxBhFecharExtrato()">Fechar</button></div>`);
+  m.querySelector('.modal-card').classList.add('cx-bh-extrato');
+};
+function cxBhRel(regs, titulo, meta, comPessoa, acc) {
+  const linhas = regs.map(r => ({data: `${cxBR(r.data)} (${cxDiaSem(r.data)})`, pessoa: cxBhNome(r.pessoaId), registro: cxBhDetalhe(r), obs: r.obs, mov: cxHorasS(r.minutos), saldo: acc ? cxHorasS(acc.get(r.id)) : ''}));
+  const tot = regs.reduce((s, r) => s + (r.minutos || 0), 0);
+  return {titulo, meta, pessoal: true, paisagem: true, colunas: [['data', 'Data'], ...(comPessoa ? [['pessoa', 'Pessoa']] : []), ['registro', 'Registro'], ['obs', 'Observação'], ['mov', 'Movimento', 'num'], ...(acc ? [['saldo', 'Saldo', 'num']] : [])], linhas, resumo: `Soma dos movimentos: ${cxHorasS(tot)}`, vazio: 'Nenhum registro.'};
+}
+window.cxBhImprimirExtrato = id => {
+  const p = cxBhPessoas().find(x => x.id === id); if (!p) return;
+  const regs = cxBhRegs().filter(r => r.pessoaId === id), acc = new Map(); let s = 0; for (const r of regs) { s += r.minutos || 0; acc.set(r.id, s); }
+  cxR.atual = cxBhRel(regs, `Banco de horas — ${p.nome}`, [['Função', p.funcao || '—'], ['Saldo', `${cxHorasS(p.saldo)} (${cxBhSit(p.saldo)})`], ['Posição em', cxBR(cxToday())]], false, acc); cxRelPrint();
+};
+window.cxBhImprimirLista = () => {
+  const f = cxBanco.f, pag = cxBanco.aba === 'pagamentos';
+  const regs = cxBhRegs().filter(r => (!pag || r.tipo === 'compensacao') && (!f.pessoa || r.pessoaId === f.pessoa) && (!f.de || r.data >= f.de) && (!f.ate || r.data <= f.ate) && (pag || !f.tipo || r.tipo === f.tipo));
+  cxR.atual = cxBhRel(regs, pag ? 'Banco de horas — pagamentos de horas' : 'Banco de horas — registros', [['Pessoa', f.pessoa ? cxBhNome(f.pessoa) : 'Todas'], ['Período', f.de || f.ate ? `${f.de ? cxBR(f.de) : 'início'} a ${f.ate ? cxBR(f.ate) : 'hoje'}` : 'Todo o período']], !f.pessoa); cxRelPrint();
 };
 
 /* ---------- Links úteis (v60) ----------
