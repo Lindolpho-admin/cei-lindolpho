@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '61';
+const CX_VERSION = '62';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -201,11 +201,110 @@ function cxBuildNav() {
   if (acessos) frag.append(acessos); if (seg) frag.append(seg);
   hidden.forEach(b => frag.append(b));
   nav.innerHTML = ''; nav.append(frag);
+  cxBuildTopNav();
+}
+
+/* ---------- Navegação superior (v62): grupos no topo + abas da seção ---------- */
+const CX_TOP = {items: [], groups: [], cur: null, tabs: null, bar: null};
+function cxBuildTopNav() {
+  const aside = document.querySelector('aside'), nav = document.getElementById('nav');
+  if (!aside || !nav || document.getElementById('cxTop')) return;
+  const find = (view, preset) => [...nav.querySelectorAll(`button[data-view="${view}"]`)].find(b => preset === undefined || (b.dataset.cxPreset || '{}') === JSON.stringify(preset));
+  const defs = [
+    ['inicio', 'Início', '⌂', [['Início', find('dashboard')]]],
+    ['secretaria', 'Secretaria', '📋', [['Lista de espera', find('espera')], ['Turmas do ano', find('turmas')], ['Ver enturmação', find('enturmacao')], ['Relatórios', find('relatorios')]]],
+    ['documentos', 'Documentos', '🗂', [['Arquivo central', find('arquivo', {})], ['Atas de reunião', find('atas')], ['Emitir documentos', find('documentos')], ['Papel timbrado', find('timbrado')]]],
+    ['financas', 'Finanças e colegiados', '💰', [['Saldos e lançamentos', find('financeiro')], ['Compras e orçamentos', find('arquivo', {area: 'compras'})], ['Conselho Escolar', find('colegiado', {orgao: 'conselho'})], ['APP', find('colegiado', {orgao: 'app'})]]],
+    ['pessoas', 'Pessoas', '👥', [['Equipe da instituição', find('equipe')], ['Banco de horas', find('banco')]]],
+    ['biblioteca', 'Biblioteca', '📚', [['Acervo', find('biblioteca')], ['Pedidos de empréstimo', find('solicitacoes')]]],
+    ['sistema', 'Sistema', '⚙', [['Página pública', find('publica')], ['Links úteis', find('links')], ['Equipe, acessos e publicações', find('acessos')], ['Backup e segurança', find('seguranca')]]]
+  ];
+  CX_TOP.groups = []; CX_TOP.items = [];
+  for (const [k, n, i, its] of defs) {
+    const g = {k, n, i, items: []};
+    its.filter(x => x[1]).forEach(([label, btn]) => { const it = {label, btn, group: g, badge: null}; g.items.push(it); CX_TOP.items.push(it); });
+    if (g.items.length) CX_TOP.groups.push(g);
+  }
+  document.body.classList.add('cx-top');
+  const bar = document.createElement('div'); bar.className = 'cx-top-bar'; bar.id = 'cxTop';
+  const brand = aside.querySelector('.brand'); if (brand) bar.append(brand);
+  const burger = document.createElement('button'); burger.type = 'button'; burger.className = 'cx-burger'; burger.innerHTML = '☰'; burger.setAttribute('aria-label', 'Abrir menu'); burger.setAttribute('aria-expanded', 'false');
+  burger.onclick = () => { const o = document.body.classList.toggle('cx-top-open'); burger.setAttribute('aria-expanded', String(o)); cxTopClosePops(); };
+  bar.append(burger);
+  const gnav = document.createElement('nav'); gnav.className = 'cx-groups'; gnav.setAttribute('aria-label', 'Seções do sistema');
+  CX_TOP.groups.forEach(g => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'cx-g'; b.dataset.g = g.k;
+    b.innerHTML = `<span aria-hidden="true">${g.i}</span> ${cxEsc(g.n)}<i class="cx-g-dot" hidden></i>`;
+    b.onclick = () => cxTopGo(CX_TOP.last?.[g.k] || g.items[0]);
+    g.btn = b; gnav.append(b);
+  });
+  CX_TOP.last = {};
+  bar.append(gnav);
+  const sp = document.createElement('span'); sp.className = 'cx-top-sp'; bar.append(sp);
+  const form = document.createElement('form'); form.className = 'cx-top-search'; form.setAttribute('role', 'search');
+  form.innerHTML = '<input type="search" name="q" placeholder="Buscar no arquivo…" aria-label="Buscar no arquivo central"><button type="submit" aria-label="Buscar">🔍</button>';
+  form.onsubmit = e => { e.preventDefault(); const q = form.q.value.trim(); document.body.classList.remove('cx-top-open'); cxGo('arquivo', {}); if (q) cx_setQuery(q); form.q.value = ''; form.q.blur(); };
+  bar.append(form);
+  const mkPop = (cls, btnHTML, label) => { const w = document.createElement('div'); w.className = 'cx-pop-wrap'; const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.innerHTML = btnHTML; b.setAttribute('aria-haspopup', 'true'); b.setAttribute('aria-expanded', 'false'); if (label) b.setAttribute('aria-label', label); const p = document.createElement('div'); p.className = 'cx-pop'; p.hidden = true;
+    b.onclick = e => { e.stopPropagation(); const open = p.hidden; cxTopClosePops(); p.hidden = !open; b.setAttribute('aria-expanded', String(open)); if (open) p.querySelector('button,a')?.focus(); };
+    w.append(b, p); return {w, b, p}; };
+  const novo = mkPop('cx-top-new', '＋ <span>Novo</span>', 'Criar novo');
+  novo.p.classList.add('cx-pop-r');
+  const quick = [['⬆ Enviar documentos', () => cxOpenUpload()], ['✎ Redigir ata', () => cxGo('atas')], ['🧾 Lançar nota fiscal', () => cxOpenUpload({kind: 'nota_fiscal', area: 'financeiro'})], ['✉ Novo ofício', () => newOficio()], ['📄 Novo comunicado', () => cxOpenTimbrado('comunicado')], ['🕒 Declaração de comparecimento', () => cxGoDecl()], ['🎓 Certificado de conclusão', () => { state.view = 'documentos'; render(); setTimeout(() => openDocGen('certificado'), 50); }], ['♙ Nova vaga na lista de espera', () => { state.view = 'espera'; render(); setTimeout(() => openWaitModal(), 50); }]];
+  quick.forEach(([t, fn]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.onclick = () => { cxTopClosePops(); document.body.classList.remove('cx-top-open'); fn(); }; novo.p.append(b); });
+  const acc = mkPop('cx-top-acc', `<span class="cx-acc-i" aria-hidden="true">${cxEsc((CX_SESSION.email || '?').charAt(0).toUpperCase())}</span><span class="cx-acc-t">Conta</span>`, 'Conta e sessão');
+  acc.p.classList.add('cx-pop-r');
+  const footer = document.querySelector('.cx-nav-footer'); if (footer) acc.p.append(footer);
+  bar.append(novo.w, acc.w);
+  const sub = document.createElement('div'); sub.className = 'cx-sub'; sub.id = 'cxSub';
+  const tabs = document.createElement('nav'); tabs.setAttribute('aria-label', 'Itens da seção'); sub.append(tabs); CX_TOP.tabs = tabs;
+  aside.prepend(sub); aside.prepend(bar);
+  document.addEventListener('click', e => { if (!e.target.closest('.cx-pop-wrap')) cxTopClosePops(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { cxTopClosePops(); document.body.classList.remove('cx-top-open'); } });
+  cxTopBadges(); cxSyncTop();
+}
+function cxTopClosePops() {
+  document.querySelectorAll('.cx-pop').forEach(p => { p.hidden = true; });
+  document.querySelectorAll('.cx-pop-wrap > button').forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+function cxTopGo(it) { if (!it) return; cxTopClosePops(); document.body.classList.remove('cx-top-open'); it.btn.click(); }
+function cxSyncTop() {
+  if (!CX_TOP.items.length) return;
+  const found = CX_TOP.items.find(it => it.btn.classList.contains('active'));
+  if (found) CX_TOP.cur = found;
+  const c = CX_TOP.cur; if (!c) return;
+  CX_TOP.last[c.group.k] = c;
+  CX_TOP.groups.forEach(g => { const on = g === c.group; g.btn.classList.toggle('on', on); if (on) g.btn.setAttribute('aria-current', 'true'); else g.btn.removeAttribute('aria-current'); });
+  cxTopTabs();
+}
+function cxTopTabs() {
+  const c = CX_TOP.cur, box = CX_TOP.tabs; if (!c || !box) return;
+  const g = c.group, sub = document.getElementById('cxSub');
+  sub.hidden = g.items.length < 2;
+  box.innerHTML = '';
+  g.items.forEach(it => {
+    const t = document.createElement('button'); t.type = 'button'; t.className = 'cx-t' + (it === c ? ' on' : ''); t.textContent = it.label;
+    if (it === c) t.setAttribute('aria-current', 'page');
+    if (it.badge) { const s = document.createElement('span'); s.className = 'cx-count'; s.textContent = it.badge.txt; s.title = it.badge.title || ''; if (it.badge.bg) { s.style.background = it.badge.bg; s.style.color = it.badge.color; } t.append(' ', s); }
+    t.onclick = () => cxTopGo(it);
+    box.append(t);
+  });
+  box.querySelector('.on')?.scrollIntoView({block: 'nearest', inline: 'center'});
+}
+function cxTopBadges() {
+  if (!CX_TOP.items.length) return;
+  CX_TOP.items.forEach(it => {
+    const c = it.btn.querySelector('.cx-count'), txt = c && !c.hidden ? c.textContent.trim() : '';
+    it.badge = txt ? {txt, title: c.title || '', bg: c.style.background, color: c.style.color} : null;
+  });
+  CX_TOP.groups.forEach(g => { const d = g.btn.querySelector('.cx-g-dot'); const n = g.items.filter(i => i.badge).length; if (d) { d.hidden = !n; d.title = n ? 'Há itens que pedem atenção' : ''; } });
+  if (CX_TOP.cur) cxTopTabs();
 }
 function cxUpdateBadges() {
   const el = document.getElementById('cxReqCount'); if (!el) return;
   const n = (cx.requests || []).filter(r => r.status === 'pending').length;
   el.hidden = !n; el.textContent = n;
+  cxTopBadges();
 }
 function cxMarkActive() {
   const preset = JSON.stringify(cx.navPreset || {});
@@ -215,6 +314,7 @@ function cxMarkActive() {
     if (on && state.view === 'colegiado') on = JSON.parse(b.dataset.cxPreset || '{}').orgao === cx.orgao;
     b.classList.toggle('active', on);
   });
+  cxSyncTop();
 }
 window.cxGo = (view, preset) => {
   state.view = view;
@@ -819,6 +919,7 @@ function cxColegBadges(alertas) {
     badge.style.background = a.nivel === 'vencido' ? '#e0483b' : '';
     badge.style.color = a.nivel === 'vencido' ? '#fff' : '';
   });
+  cxTopBadges();
 }
 async function cxLoadColegiados(force) {
   if (!cx.colegiados || force) { cx.colegiados = await cxRequest('/api/portal/colegiados'); try { cxColegBadges(cxColegAlertas(cx.colegiados)); } catch {} }
