@@ -60,7 +60,9 @@ export function publicTurmas(p){
 
 // v61: banco de horas da equipe (somente administração).
 // Saldo positivo: o CEI deve horas à pessoa. Saldo negativo: a pessoa deve horas ao CEI.
-export const TIPOS_BANCO=['entrada','saida','saida_rapida','extra','compensacao','ajuste'];
+export const TIPOS_BANCO=['entrada','saida','saida_rapida','extra','evento','falta','compensacao','ajuste'];
+// v64: situação do registro (confirmado, pendente de conversa, abonado), regra de ganho do evento e resolução da pendência.
+export const SITUACOES_BANCO=['confirmado','pendente','abonado'],REGRAS_EVENTO=['igual','mais50','dia','outro'],RESOLUCOES_BANCO=['compensa','folha','abona','folga'];
 const HM=/^([01]\d|2[0-3]):[0-5]\d$/;
 const hmMin=v=>{const s=String(v??'').trim();if(!HM.test(s))return null;const[h,m]=s.split(':').map(Number);return h*60+m};
 const durMin=v=>{const m=String(v??'').trim().match(/^(\d{1,3})(?::([0-5]\d))?$/);return m?Number(m[1])*60+Number(m[2]||0):null};
@@ -70,27 +72,44 @@ export function minutosBanco(r){
   case 'entrada':return e==null||x==null?null:e-x; // chegou antes da escala: ganha; atrasou: perde
   case 'saida':return e==null||x==null?null:x-e; // saiu depois da escala: ganha; saiu mais cedo: perde
   case 'saida_rapida':return intervalo==null?null:(r.abonado?0:-intervalo);
-  case 'extra':return intervalo;
+  case 'extra':return (intervalo??durMin(r.duracao))||null; // das 17h às 20h, ou só a quantidade
+  case 'evento':{ // evento escolar: mesma quantidade, 50% a mais, dia todo ou outro valor
+   const jor=Number.isFinite(r.jornada)&&r.jornada>0?r.jornada:480,base=r.diaTodo?jor:intervalo;
+   if(r.regra==='dia')return jor;
+   if(r.regra==='outro'){const d=durMin(r.duracao);return d||null}
+   if(base==null)return null;return r.regra==='mais50'?Math.round(base*1.5):base}
+  case 'falta':{const jor=Number.isFinite(r.jornada)&&r.jornada>0?r.jornada:480,d=r.duracao?durMin(r.duracao):jor;return d?-d:null} // dia inteiro (ou as horas informadas)
   case 'compensacao':case 'ajuste':{const d=intervalo??durMin(r.duracao);if(!d)return null;return r.sentido==='-'?-d:d}
  }
  return null;
 }
-const ERRO_BANCO={entrada:'Informe o horário da escala e o horário em que a pessoa chegou.',saida:'Informe o horário da escala e o horário em que a pessoa saiu.',saida_rapida:'Informe o horário em que a pessoa saiu e o horário em que voltou (a volta depois da saída).',extra:'Informe o início e o fim do trabalho extra (o fim depois do início).',compensacao:'Informe o horário de início e fim ou a duração (ex.: 2:30).',ajuste:'Informe a duração (ex.: 4:00).'};
+const ERRO_BANCO={entrada:'Informe o horário da escala e o horário em que a pessoa chegou.',saida:'Informe o horário da escala e o horário em que a pessoa saiu.',saida_rapida:'Informe o horário em que a pessoa saiu e o horário em que voltou (a volta depois da saída).',extra:'Informe o início e o fim do trabalho a mais (o fim depois do início) ou a quantidade de horas.',evento:'Informe o horário do evento (ou marque dia todo). Se a regra for "outro valor", informe a quantidade final.',falta:'Informe as horas do dia (ex.: 8 ou 7:30) ou deixe em branco para usar a jornada da escala.',compensacao:'Informe o horário de início e fim ou a duração (ex.: 2:30).',ajuste:'Informe a duração (ex.: 4:00).'};
 function cleanRegistroBanco(r,old,p,user){
  const pessoa=(p.equipe||[]).find(e=>e.id===r?.pessoaId);if(!pessoa)deny('Escolha uma pessoa cadastrada em Equipe da instituição.',400);
  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(r.data||''))||Number.isNaN(Date.parse(r.data+'T12:00:00Z')))deny('Informe a data.',400);
  const tipo=TIPOS_BANCO.includes(r.tipo)?r.tipo:deny('Tipo de registro inválido.',400);
  const h=v=>HM.test(String(v??'').trim())?String(v).trim():'';
- const out={id:old?.id||crypto.randomUUID(),pessoaId:pessoa.id,pessoaNome:pessoa.nome,data:r.data,tipo,escala:'',real:'',inicio:'',fim:'',duracao:'',sentido:'',abonado:false,motivo:'',obs:clip(r.obs,300)};
+ const esc=(p.bancoHoras?.escalas||{})[pessoa.id],ei=hmMin(esc?.entrada),es=hmMin(esc?.saida),jornada=ei!=null&&es!=null&&es>ei?es-ei:480;
+ const situacao=SITUACOES_BANCO.includes(r.situacao)?r.situacao:(r.abonado===true?'abonado':'confirmado');
+ const out={id:old?.id||crypto.randomUUID(),pessoaId:pessoa.id,pessoaNome:pessoa.nome,data:r.data,tipo,escala:'',real:'',inicio:'',fim:'',duracao:'',sentido:'',abonado:false,motivo:'',obs:clip(r.obs,300),situacao,resolucao:'',evento:'',regra:'',diaTodo:false,jornada};
  if(tipo==='entrada'||tipo==='saida'){out.escala=h(r.escala);out.real=h(r.real)}
  else{out.inicio=h(r.inicio);out.fim=h(r.fim)}
+ if(tipo==='extra'||tipo==='falta')out.duracao=String(r.duracao??'').trim().slice(0,7);
+ if(tipo==='evento'){out.evento=clip(r.evento,120);out.regra=REGRAS_EVENTO.includes(r.regra)?r.regra:'igual';out.diaTodo=r.diaTodo===true;out.duracao=out.regra==='outro'?String(r.duracao??'').trim().slice(0,7):'';if(out.diaTodo){out.inicio=out.fim=''}}
  if(tipo==='compensacao'||tipo==='ajuste'){out.sentido=r.sentido==='-'?'-':'+';if(!(out.inicio&&out.fim))out.duracao=String(r.duracao??'').trim().slice(0,7)}
  if(tipo==='ajuste'){out.inicio=out.fim=''}
  if(tipo==='saida_rapida'){out.motivo=['consulta','pessoal','outro'].includes(r.motivo)?r.motivo:'pessoal';out.abonado=r.abonado===true}
  const min=minutosBanco(out);if(min==null)deny(ERRO_BANCO[tipo],400);
+ // Pendência já conta no saldo. Resolver: compensa/folga mantêm o débito; folha retira do banco; abona zera.
+ if(situacao!=='pendente'&&RESOLUCOES_BANCO.includes(r.resolucao))out.resolucao=r.resolucao;
+ if(out.resolucao==='abona')out.situacao='abonado';
+ if(out.situacao==='pendente')out.resolucao='';
+ out.resolvidoEm=out.resolucao?(old?.resolucao===out.resolucao&&old?.resolvidoEm?old.resolvidoEm:new Date().toISOString().slice(0,10)):'';
+ out.minutosBase=min;
  if(Math.abs(min)>(tipo==='ajuste'||tipo==='compensacao'?999*60:16*60))deny('Diferença grande demais para um registro. Confira os horários.',400);
  if(tipo==='ajuste'&&!out.obs)deny('Explique o ajuste em observações (ex.: saldo trazido da planilha de 2025).',400);
- return {...out,minutos:min,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
+ const zera=out.situacao==='abonado'||out.resolucao==='folha';
+ return {...out,minutos:zera?0:min,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
 }
 function bancoHoras(p){const b=p.bancoHoras&&typeof p.bancoHoras==='object'?p.bancoHoras:{};return {escalas:b.escalas&&typeof b.escalas==='object'?b.escalas:{},registros:Array.isArray(b.registros)?b.registros:[]}}
 // v63: venda de fotos (aba Fotos). Eventos com preço por faixa de quantidade e pedidos dos pais. Valores em centavos.

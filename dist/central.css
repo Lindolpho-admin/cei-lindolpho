@@ -486,3 +486,10 @@ body.cx-top .cx-g,body.cx-top .cx-t{flex:0 0 auto}
 .cx-bh-card.warn{border-left-color:#d9a21b}.cx-bh-card.warn b{color:#8a6100}
 #cxFoItens select,#cxFoItens input,#cxFoEvFaixas input,#cxFoAnx input[type=file]{width:100%;box-sizing:border-box}
 @media (max-width:640px){#cxFoAnx{grid-template-columns:1fr!important}#cxFoItens>div,#cxFoEvFaixas>div{grid-template-columns:1fr 1fr!important}}
+/* v64: banco de horas — pendências e janela Resolver */
+.cx-bh-card.pend{border-left-color:#d99a00}.cx-bh-card.pend b{color:#8a5d00}
+.cx-bh-table tr.cx-bh-pend td{background:#fff8e6}
+.cx-bh-res{display:grid;gap:8px;margin:10px 0 14px}
+.cx-bh-res-op{display:grid;gap:3px;text-align:left;border:1.5px solid var(--cx-line);border-radius:12px;padding:11px 14px;background:#fff;cursor:pointer;font:inherit}
+.cx-bh-res-op:hover,.cx-bh-res-op:focus-visible{border-color:var(--cx-blue);background:#eef3fb}
+.cx-bh-res-op b{font-size:15px;color:var(--cx-ink)}.cx-bh-res-op small{font-size:12.5px;color:var(--cx-muted);line-height:1.35}
