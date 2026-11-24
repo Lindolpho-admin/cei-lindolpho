@@ -28,8 +28,9 @@ const CENTRAL_KINDS = {
   contrato: "Contrato", oficio_recebido: "Oficio_Recebido", oficio_enviado: "Oficio_Enviado",
   comunicado: "Comunicado", relatorio: "Relatorio", projeto: "Projeto", plano: "Plano", termo: "Termo",
   estatuto: "Estatuto", regimento: "Regimento", ppp: "PPP", calendario: "Calendario", cardapio: "Cardapio",
-  foto: "Registro_Fotografico", outro: "Documento",
+  foto: "Registro_Fotografico", outro: "Documento", assunto: "Assunto",
 };
+const ASSUNTO_TIPOS = ["compra", "doacao", "evento", "servico"];
 const FIN_ACCOUNTS = ["SICOOB", "PDDE_Basico", "PDDE_Qualidade", "Educacao_Conectada", "OUTRA"];
 const FIN_MOVES = ["entrada", "saida", "saldo_extrato", "saldo_inicial"];
 const FIN_NATURES = ["", "custeio", "capital"];
@@ -72,6 +73,24 @@ function centralFields(get) {
       amount: cents, category: text(fin.category, 80), supplier: text(fin.supplier, 160), docNumber: text(fin.docNumber, 60),
     };
     out.program = fin.account === "OUTRA" ? "" : fin.account;
+  }
+  // v66: cadastro de assunto (kind "assunto": compra, doação, evento, serviço contínuo) e ligação dos documentos a assuntos.
+  if (kind === "assunto") {
+    let c = get("assunto");
+    if (typeof c === "string" && c.trim()) { try { c = JSON.parse(c); } catch { c = null; } }
+    c = c && typeof c === "object" ? c : {};
+    out.processo = title.slice(0, 160);
+    out.assunto = {
+      tipo: ASSUNTO_TIPOS.includes(c.tipo) ? c.tipo : "compra",
+      account: FIN_ACCOUNTS.includes(c.account) ? c.account : "", nature: FIN_NATURES.includes(c.nature || "") ? (c.nature || "") : "",
+      category: text(c.category, 80), supplier: text(c.supplier, 160),
+    };
+  } else {
+    let ids = get("assuntos");
+    if (typeof ids === "string" && ids.trim()) { try { ids = JSON.parse(ids); } catch { ids = []; } }
+    out.assuntos = (Array.isArray(ids) ? ids : []).filter(id => typeof id === "string" && validId(id)).slice(0, 12);
+    const sem = get("semAssunto");
+    out.semAssunto = !out.assuntos.length && !out.processo && (sem === true || sem === "true" || sem === "1");
   }
   if (!out.program && area === "app") out.program = "APP";
   if (kind === "extrato") out.statementType = out.fin?.statementType || "outro";
@@ -230,7 +249,7 @@ async function handleApi(request, env, url) {
     try { fields = centralFields(name => form.get(name)); } catch (error) { return fail(error.message, error.status || 400); }
     const file = form.get("file");
     const hasFile = file instanceof File && file.size > 0;
-    if (!hasFile && !fields.fin) return fail("Selecione o arquivo ou informe um lançamento financeiro.");
+    if (!hasFile && !fields.fin && fields.kind !== "assunto") return fail("Selecione o arquivo ou informe um lançamento financeiro.");
     const record = { id: crypto.randomUUID(), ...fields, createdAt: stamp(), updatedAt: stamp(), createdBy: env.USER?.email || "" };
     if (hasFile) { try { await writeFile(env.BUCKET, record, file); } catch (error) { return fail(error.message); } }
     try { await putRecord(env.BUCKET, record); }
@@ -314,7 +333,7 @@ async function handleApi(request, env, url) {
     if (record.central || input?.central === true) {
       let fields;
       try { fields = centralFields(name => input[name]); } catch (error) { return fail(error.message, error.status || 400); }
-      if (!record.file && !fields.fin && !(record.typed || record.body)) return fail("Um registro sem arquivo precisa de lançamento financeiro.");
+      if (!record.file && !fields.fin && fields.kind !== "assunto" && !(record.typed || record.body)) return fail("Um registro sem arquivo precisa de lançamento financeiro.");
       if (record.typed || (record.kind === "ata" && record.body)) {
         const body = text(input.body ?? record.body, 60000);
         if (!body) return fail("Informe o texto da ata.");

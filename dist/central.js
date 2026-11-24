@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '65';
+const CX_VERSION = '66';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -99,8 +99,9 @@ const cxViewable = f => f && ['application/pdf', 'image/jpeg', 'image/png'].incl
 
 /* ---------- Dados do arquivo ---------- */
 const cx = {records: [], loaded: false, loading: null, loadedAt: 0, publicIds: new Set(), requests: [],
-  filter: {q: '', area: '', kind: '', year: '', processo: '', source: ''}, finYear: String(new Date().getFullYear()), finAccount: '', finFilter: {nature: '', category: '', move: ''}};
+  filter: cxFilterDefault(), finYear: String(new Date().getFullYear()), finAccount: '', finFilter: {nature: '', category: '', move: '', assunto: '', q: ''}, assuntos: []};
 window.cxState = cx;
+function cxFilterDefault() { return {q: '', area: '', kind: '', year: '', assunto: '', source: '', account: '', nature: '', grupo: 'mes', modo: 'docs', tipoAs: '', onlyInc: false}; }
 window.cxLoad = (...a) => cxLoad(...a);
 window.cxFinanceCalc = (...a) => cxFinance(...a);
 
@@ -118,7 +119,7 @@ async function cxLoad(force = false) {
   cx.loading = (async () => {
     try {
       const [records, pubs] = await Promise.all([cxRequest('/api/app/documents'), cxRequest('/api/portal/publications').catch(() => ({ids: []}))]);
-      cx.records = records; cx.publicIds = new Set(pubs.ids || []); cx.publicMeta = pubs.meta || {}; cx.loaded = true; cx.loadedAt = Date.now();
+      cx.assuntos = records.filter(r => r.kind === 'assunto'); cx.records = records.filter(r => r.kind !== 'assunto'); cx._as = cx._asMap = cx._asTitle = null; cx.publicIds = new Set(pubs.ids || []); cx.publicMeta = pubs.meta || {}; cx.loaded = true; cx.loadedAt = Date.now();
       cxRequest('/api/portal/requests').then(list => { cx.requests = list; cxUpdateBadges(); }).catch(() => {});
       return records;
     } finally { cx.loading = null; }
@@ -135,8 +136,8 @@ function cxGeneratedItems() {
   return out;
 }
 function cxAllItems() {
-  const files = cx.records.map(r => ({src: 'rec', id: r.id, r, title: r.title, date: r.date || (r.competence ? r.competence + '-01' : ''), area: cxAreaOf(r), kind: r.kind, notes: r.notes || '', processo: r.processo || ''}));
-  return files.concat(cxGeneratedItems());
+  const files = cx.records.map(r => { const links = cxLinksOf(r); return {src: 'rec', id: r.id, r, title: r.title, date: r.date || (r.competence ? r.competence + '-01' : ''), area: cxAreaOf(r), kind: r.kind, notes: r.notes || '', links, processo: cxLinkNames(r, links)}; });
+  return files.concat(cxGeneratedItems().map(g => ({links: [], ...g})));
 }
 function cxHaystack(x) {
   const r = x.r || {};
@@ -321,7 +322,7 @@ window.cxGo = (view, preset) => {
   if (view === 'colegiado') { cx.orgao = preset?.orgao || cx.orgao || 'conselho'; cx.navPreset = preset || {}; }
   if (view === 'arquivo') {
     cx.navPreset = preset || {};
-    cx.filter = {q: '', area: '', kind: '', year: '', processo: '', source: '', ...(preset || {})};
+    cx.filter = {...cxFilterDefault(), ...(preset || {})};
   }
   render();
   window.scrollTo({top: 0});
@@ -414,66 +415,283 @@ function cxRenderDashboard(a) {
 window.cxGoDecl = () => { state.view = 'documentos'; if (typeof documentosTab !== 'undefined') documentosTab = 'declaracoes'; render(); setTimeout(() => cxOpenDecl('comparecimento'), 50); };
 window.cx_setQuery = q => { cx.filter.q = q || ''; const i = document.getElementById('cxQ'); if (i) { i.value = cx.filter.q; cxFilter(); } };
 
+
+/* ---------- v66: Assuntos (compra, doação, evento, serviço contínuo) ---------- */
+// Um assunto reúne os documentos que se referem à mesma coisa. Documentos antigos que só têm o campo “processo” viram assuntos automaticamente (pelo nome).
+const CX_AS_TIPOS = {
+  compra: {label: 'Compra', ico: '🛒', steps: [['orcamento', 'Orçamentos', true], ['pesquisa_precos', 'Mapa / pesquisa de preços', false], ['ata_compra', 'Ata de aprovação', true], ['nota_fiscal', 'Nota fiscal', true], ['comprovante', 'Comprovante de pagamento', true]]},
+  doacao: {label: 'Doação', ico: '🎁', steps: [['termo', 'Termo de doação', true], ['ata', 'Ata / aceite', false], ['foto', 'Registro fotográfico', false]]},
+  evento: {label: 'Evento / arrecadação', ico: '🎉', steps: [['ata', 'Ata / autorização', false], ['comunicado', 'Comunicado às famílias', false], ['relatorio', 'Prestação do evento', true]]},
+  servico: {label: 'Serviço contínuo', ico: '🔁', steps: [['contrato', 'Contrato', true], ['nota_fiscal', 'Notas fiscais', true], ['comprovante', 'Comprovantes', true]]},
+};
+const CX_KIND_COMPRA = new Set(['orcamento', 'cotacao', 'pesquisa_precos', 'ata_compra', 'nota_fiscal', 'comprovante', 'recibo', 'contrato']);
+function cxAssuntoList() {
+  const reg = (cx.assuntos || []).map(r => ({id: r.id, title: r.title, tipo: r.assunto?.tipo || 'compra', account: r.assunto?.account || '', nature: r.assunto?.nature || '', category: r.assunto?.category || '', supplier: r.assunto?.supplier || '', date: r.date, rec: r}));
+  const known = new Set(reg.map(a => cxNorm(a.title))), virt = new Map();
+  for (const r of cx.records) {
+    if (r.assuntos?.length || !r.processo) continue;
+    const k = cxNorm(r.processo); if (known.has(k) || virt.has(k)) continue;
+    virt.set(k, {id: 'p:' + r.processo, title: r.processo, tipo: 'compra', account: '', nature: '', category: '', supplier: '', virtual: true});
+  }
+  return reg.concat([...virt.values()]).sort((p, q) => p.title.localeCompare(q.title, 'pt-BR'));
+}
+const cxAsList = () => cx._as || (cx._as = cxAssuntoList());
+const cxAsMap = () => cx._asMap || (cx._asMap = new Map(cxAsList().map(a => [a.id, a])));
+const cxAsByTitle = () => cx._asTitle || (cx._asTitle = new Map(cxAsList().map(a => [cxNorm(a.title), a.id])));
+function cxLinksOf(r) {
+  if (!r || r.kind === 'assunto') return [];
+  if (r.assuntos?.length) { const map = cxAsMap(); return r.assuntos.filter(id => map.has(id)); }
+  if (r.processo) { const id = cxAsByTitle().get(cxNorm(r.processo)); return id ? [id] : []; }
+  return [];
+}
+const cxLinkNames = (r, links = cxLinksOf(r)) => links.map(id => cxAsMap().get(id)?.title).filter(Boolean).join(' · ') || r.processo || '';
+const cxSemAssunto = x => !!x.r && CX_KIND_COMPRA.has(x.kind) && !x.links.length && !x.r.semAssunto;
+// conta, recurso, categoria e fornecedor: do próprio lançamento ou, se não tiver, herdados do assunto
+function cxMetaOf(x) {
+  const fin = x.r?.fin || null, a = (x.links || []).map(id => cxAsMap().get(id)).find(Boolean) || {};
+  return {account: fin?.account || a.account || '', nature: fin?.nature || a.nature || '', category: fin?.category || a.category || '', supplier: fin?.supplier || a.supplier || ''};
+}
+function cxAsStats(a, all) {
+  const t = CX_AS_TIPOS[a.tipo] || CX_AS_TIPOS.compra, docs = all.filter(x => x.links.includes(a.id));
+  const has = k => docs.filter(x => x.kind === k || (k === 'orcamento' && x.kind === 'cotacao')).length;
+  const sum = mv => docs.filter(x => x.r?.fin?.move === mv).reduce((s, x) => s + x.r.fin.amount, 0);
+  return {docs, has, spent: sum('saida'), got: sum('entrada'), falta: t.steps.filter(([k, , req]) => req && !has(k)), last: docs.map(x => String(x.date)).sort().pop() || String(a.date || '')};
+}
+function cxAsCardHTML(a, all, detail) {
+  const t = CX_AS_TIPOS[a.tipo] || CX_AS_TIPOS.compra, st = cxAsStats(a, all), q = JSON.stringify(a.id);
+  const chips = [`<span class="cx-chip">${t.ico} ${t.label}</span>`, a.account ? `<span class="cx-chip">${cxEsc(CX_ACCOUNTS[a.account]?.label || '')}</span>` : '', a.nature ? `<span class="cx-chip">${CX_NATURES[a.nature]}</span>` : '', a.category ? `<span class="cx-chip">${cxEsc(a.category)}</span>` : '', a.virtual ? '<span class="cx-chip warn" title="Veio do campo “processo” dos documentos antigos">Ainda não cadastrado</span>' : ''].join('');
+  const check = t.steps.map(([k, l, req]) => { const n = st.has(k); return `<span class="cx-chip ${n ? 'ok' : (req ? 'warn' : '')}">${n ? '✓' : '○'} ${l}${n > 1 ? ' (' + n + ')' : ''}</span>`; }).join('');
+  const firstMissing = st.falta[0]?.[0] || '';
+  const add = `<button class="cx-btn small" onclick="cxOpenUpload({assuntos:[${cxEsc(q)}],kind:'${firstMissing}'})">+ Documento</button>`;
+  const btns = detail
+    ? `${add}${a.virtual ? `<button class="cx-btn small" onclick="cxOpenAssunto(${cxEsc(q)})">Cadastrar este assunto</button>` : `<button class="cx-btn small" onclick="cxOpenAssunto(${cxEsc(q)})">Editar assunto</button><button class="cx-btn small danger" onclick="cxDeleteAssunto(${cxEsc(q)})">Excluir</button>`}`
+    : `<button class="cx-btn small primary" onclick="cxGo('arquivo',{assunto:${cxEsc(q)}})">Ver documentos</button>${add}${a.virtual ? '' : `<button class="cx-btn small" onclick="cxOpenAssunto(${cxEsc(q)})">Editar</button>`}`;
+  return `<article class="cx-item cx-as"><div><div class="cx-chips">${chips}</div><h4>${cxEsc(a.title)}</h4><div class="cx-checklist" style="margin:6px 0">${check}</div>
+    <div class="cx-meta"><span>${st.docs.length} documento(s)</span>${st.spent ? `<span>Despesas: <b>${cxMoney(st.spent)}</b></span>` : ''}${st.got ? `<span>Recebido: <b>${cxMoney(st.got)}</b></span>` : ''}${st.falta.length ? `<span class="cx-chip warn">Falta: ${st.falta.map(x => x[1]).join(', ')}</span>` : (st.docs.length ? '<span class="cx-chip ok">✓ Documentação completa</span>' : '')}${a.supplier ? `<span>${cxEsc(a.supplier)}</span>` : ''}</div></div><div class="cx-actions">${btns}</div></article>`;
+}
+function cxAsHeaderHTML(id, all) {
+  if (id === '__sem') return `<div class="cx-process"><h3>Documentos sem assunto</h3><p class="muted" style="margin:0">São documentos de compra (orçamento, nota, ata de compra, comprovante, recibo, contrato) que ainda não foram ligados a nenhum assunto. Abra “⋯ Mais → Ligar a um assunto” em cada um, ou marque “Não é de um assunto” se não for de compra.</p></div>`;
+  const a = cxAsMap().get(id); if (!a) return '<div class="cx-process"><p class="muted" style="margin:0">Este assunto não existe mais.</p></div>';
+  return `<div class="cx-process">${cxAsCardHTML(a, all, true)}</div>`;
+}
+window.cxOpenAssunto = (id, nameHint) => {
+  if (!CX_ADMIN) return;
+  const a = id ? cxAsMap().get(id) : null, reg = a && !a.virtual;
+  cxModal(`<h2>${reg ? 'Editar assunto' : 'Novo assunto'}</h2><p class="hint">Assunto é aquilo a que vários documentos se referem: uma compra, uma doação, um evento ou um serviço contínuo. Os documentos ligados a ele herdam a conta, o recurso e a categoria.</p>
+  <form class="cx-form" onsubmit="cxSaveAssunto(event,${cxEsc(JSON.stringify(reg ? a.id : ''))})">
+    <label class="full">Nome *<input name="title" required maxlength="160" value="${cxEsc(a?.title || nameHint || '')}" placeholder="Ex.: Compra de ventiladores 2026"></label>
+    <label>Tipo *<select name="tipo">${Object.entries(CX_AS_TIPOS).map(([k, v]) => `<option value="${k}" ${k === (a?.tipo || 'compra') ? 'selected' : ''}>${v.ico} ${v.label}</option>`).join('')}</select></label>
+    <label>Conta / recurso<select name="account"><option value="">— ainda não sei —</option>${cxOptions(CX_ACCOUNTS, a?.account || '')}</select></label>
+    <label>Natureza<select name="nature">${cxOptions(CX_NATURES, a?.nature || '')}</select></label>
+    <label>Categoria<select name="category"><option value="">—</option>${CX_CATS.saida.map(c => `<option ${c === a?.category ? 'selected' : ''}>${cxEsc(c)}</option>`).join('')}</select></label>
+    <label class="full">Fornecedor / origem<input name="supplier" maxlength="160" value="${cxEsc(a?.supplier || '')}" placeholder="Ex.: Loja ABC Ltda."></label>
+    <label class="full">Observações<textarea name="notes" rows="2" maxlength="3000">${cxEsc(a?.rec?.notes || '')}</textarea></label>
+    <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar assunto</button></div></form>`);
+};
+window.cxSaveAssunto = async (e, id) => {
+  e.preventDefault(); const form = e.target, title = form.title.value.trim(), btn = form.querySelector('button[type=submit]');
+  const assunto = {tipo: form.tipo.value, account: form.account.value, nature: form.nature.value, category: form.category.value, supplier: form.supplier.value.trim()};
+  btn.disabled = true;
+  try {
+    if (id) {
+      const old = cxAsMap().get(id), rec = old.rec;
+      await cxRequest('/api/app/documents/' + id, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({central: true, kind: 'assunto', area: 'compras', date: rec.date, title, notes: form.notes.value, assunto})});
+      if (old.title !== title) { // documentos ligados só pelo nome acompanham o novo nome
+        const k = cxNorm(old.title), docs = cx.records.filter(r => r.central && !r.assuntos?.length && cxNorm(r.processo) === k);
+        for (const r of docs) await cxRequest('/api/app/documents/' + r.id, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({central: true, kind: r.kind, area: r.area, date: r.date, title: r.title, notes: r.notes, tags: r.tags, fin: r.fin, processo: title, assuntos: [id]})});
+      }
+    } else {
+      const data = new FormData(); data.append('kind', 'assunto'); data.append('area', 'compras'); data.append('date', cxToday()); data.append('title', title); data.append('notes', form.notes.value); data.append('assunto', JSON.stringify(assunto));
+      await cxRequest('/api/app/arquivo', {method: 'POST', body: data});
+    }
+    cxCloseModal(); await cxLoad(true); cxToast('Assunto salvo.'); render();
+  } catch (err) { alert(err.message); } finally { btn.disabled = false; }
+};
+window.cxDeleteAssunto = async id => {
+  const a = cxAsMap().get(id); if (!a || a.virtual) return;
+  if (!confirm(`Excluir o assunto “${a.title}”?\n\nOs documentos continuam no arquivo, mas ficam sem assunto.`)) return;
+  try { await cxRequest('/api/app/documents/' + id, {method: 'DELETE'}); if (cx.filter.assunto === id) cx.filter.assunto = ''; await cxLoad(true); cxToast('Assunto excluído.'); render(); } catch (err) { alert(err.message); }
+};
+// Campo “Assunto” dos formulários de documento
+function cxAsPickerHTML(r, preset = {}) {
+  let tokens = r ? (r.assuntos?.length ? r.assuntos : (r.processo ? ['p:' + r.processo] : [])) : (preset.assuntos || []);
+  if (r && !r.assuntos?.length && r.processo) { const id = cxAsByTitle().get(cxNorm(r.processo)); if (id) tokens = [id]; }
+  return `<div class="full cx-aspick" id="cxAsPick" data-tokens="${cxEsc(JSON.stringify(tokens))}"><div><b>Assunto</b> <small class="muted" id="cxAsReq"></small></div>
+    <div class="cx-chips" id="cxAsChips" style="margin:6px 0"></div>
+    <select id="cxAsSel" onchange="cxAsAdd(this)" aria-label="Ligar a um assunto"></select>
+    <label class="cx-check"><input type="checkbox" name="semAssunto" ${r?.semAssunto ? 'checked' : ''} onchange="cxAsRefresh(this.form)"> Não é de um assunto (ex.: extrato, estatuto, ata geral, termo de doação avulso)</label>
+    <fieldset class="cx-fieldset" id="cxAsNew" hidden onkeydown="if(event.key==='Enter'){event.preventDefault();cxAsCreate(this.querySelector('button.primary'))}"><legend>Novo assunto</legend>
+      <label>Nome *<input name="nTitle" maxlength="160" placeholder="Ex.: Compra de ventiladores 2026"></label>
+      <label>Tipo<select name="nTipo">${Object.entries(CX_AS_TIPOS).map(([k, v]) => `<option value="${k}">${v.ico} ${v.label}</option>`).join('')}</select></label>
+      <label>Conta / recurso<select name="nAccount"><option value="">— ainda não sei —</option>${cxOptions(CX_ACCOUNTS, '')}</select></label>
+      <label>Natureza<select name="nNature">${cxOptions(CX_NATURES, '')}</select></label>
+      <label class="full">Fornecedor / origem<input name="nSupplier" maxlength="160"></label>
+      <div class="actions full"><button type="button" onclick="this.form.querySelector('#cxAsNew').hidden=true">Cancelar</button><button type="button" class="primary" onclick="cxAsCreate(this)">Criar e ligar</button></div></fieldset></div>`;
+}
+const cxAsTokens = form => { try { return JSON.parse(form.querySelector('#cxAsPick')?.dataset.tokens || '[]'); } catch { return []; } };
+const cxAsSetTokens = (form, t) => { form.querySelector('#cxAsPick').dataset.tokens = JSON.stringify(t); cxAsRefresh(form); };
+window.cxAsRefresh = form => {
+  const box = form.querySelector('#cxAsPick'); if (!box) return;
+  const tokens = cxAsTokens(form), map = cxAsMap();
+  const kind = form.kind?.value || (form.compra ? (form.compra.checked ? 'ata_compra' : 'ata') : '');
+  const nameOf = t => t.startsWith('p:') ? t.slice(2) : (map.get(t)?.title || 'Assunto removido');
+  box.querySelector('#cxAsChips').innerHTML = tokens.map(t => `<span class="cx-chip">📁 ${cxEsc(nameOf(t))} <button type="button" class="cx-x" aria-label="Tirar este assunto" onclick="cxAsRemove(this.form,${cxEsc(JSON.stringify(t))})">×</button></span>`).join('') || '<span class="muted">Nenhum assunto escolhido.</span>';
+  const left = cxAsList().filter(a => !tokens.includes(a.id));
+  box.querySelector('#cxAsSel').innerHTML = '<option value="">+ Ligar a um assunto…</option>' + Object.entries(CX_AS_TIPOS).map(([k, v]) => { const g = left.filter(a => a.tipo === k); return g.length ? `<optgroup label="${v.label}">${g.map(a => `<option value="${cxEsc(a.id)}">${cxEsc(a.title)}</option>`).join('')}</optgroup>` : ''; }).join('') + '<option value="__new">＋ Criar novo assunto…</option>';
+  if (tokens.length) form.semAssunto.checked = false;
+  form.semAssunto.disabled = tokens.length > 0;
+  box.querySelector('#cxAsReq').textContent = CX_KIND_COMPRA.has(kind) ? '— obrigatório para este tipo de documento: escolha o assunto ou marque “Não é de um assunto”.' : '— opcional para este tipo de documento.';
+};
+window.cxAsRemove = (form, tok) => cxAsSetTokens(form, cxAsTokens(form).filter(t => t !== tok));
+window.cxAsAdd = sel => {
+  const form = sel.form, v = sel.value; if (!v) return;
+  if (v === '__new') { sel.value = ''; const n = form.querySelector('#cxAsNew'); n.hidden = false; n.querySelector('[name=nTitle]').focus(); return; }
+  cxAsSetTokens(form, [...cxAsTokens(form), v]); cxAsInherit(form, cxAsMap().get(v));
+};
+// ao ligar a um assunto, o lançamento financeiro já vem com a conta, o recurso e a categoria dele
+function cxAsInherit(form, a) {
+  if (!a || !form.hasFin?.checked || !a.account || form.finAccount.dataset.touched) return;
+  form.finAccount.value = a.account; if (a.nature) form.finNature.value = a.nature;
+  form.finCategory.dataset.value = a.category || ''; if (!form.finSupplier.value && a.supplier) form.finSupplier.value = a.supplier;
+  cxToggleFin(form);
+}
+window.cxAsCreate = async btn => {
+  const form = btn.form, box = form.querySelector('#cxAsNew'), v = n => box.querySelector(`[name=${n}]`).value.trim();
+  const title = v('nTitle'); if (!title) return alert('Dê um nome ao assunto.');
+  btn.disabled = true;
+  try {
+    const data = new FormData(); data.append('kind', 'assunto'); data.append('area', 'compras'); data.append('date', cxToday()); data.append('title', title);
+    data.append('assunto', JSON.stringify({tipo: v('nTipo'), account: v('nAccount'), nature: v('nNature'), category: '', supplier: v('nSupplier')}));
+    const rec = await cxRequest('/api/app/arquivo', {method: 'POST', body: data});
+    await cxLoad(true);
+    box.hidden = true; box.querySelector('[name=nTitle]').value = '';
+    cxAsSetTokens(form, [...cxAsTokens(form), rec.id]); cxAsInherit(form, cxAsMap().get(rec.id));
+  } catch (err) { alert(err.message); } finally { btn.disabled = false; }
+};
+function cxAsRead(form) {
+  const tokens = cxAsTokens(form), ids = tokens.filter(t => !t.startsWith('p:')), legacy = tokens.find(t => t.startsWith('p:'));
+  const first = ids.length ? cxAsMap().get(ids[0])?.title : (legacy ? legacy.slice(2) : '');
+  return {assuntos: ids, processo: first || '', semAssunto: !tokens.length && !!form.semAssunto?.checked};
+}
+function cxAsCheck(form, kind) {
+  const r = cxAsRead(form);
+  if (CX_KIND_COMPRA.has(kind) && !r.assuntos.length && !r.processo && !r.semAssunto) throw new Error('Escolha a que assunto (compra, doação…) este documento se refere, ou marque “Não é de um assunto”.');
+  return r;
+}
+
 /* ---------- Arquivo central ---------- */
 function cxRenderArchive(a) {
   const f = cx.filter;
   a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-head"><div><h2>Arquivo da administração</h2><p>Envie, encontre e organize atas, orçamentos, notas, extratos e todos os documentos do CEI.</p></div>
-    <div class="cx-btns"><button class="cx-btn primary" onclick="cxOpenUpload()">⬆ Enviar documentos</button><button class="cx-btn" onclick="cxGo('atas')">✎ Redigir ata</button></div></div>
-    <div class="cx-search"><input id="cxQ" type="search" value="${cxEsc(f.q)}" placeholder="Pesquise por título, assunto, processo, fornecedor, mês, valor…" oninput="cxState.filter.q=this.value;cxFilter()" aria-label="Pesquisar no arquivo"></div>
-    <div class="cx-folders" id="cxFolders"></div>
+    <div class="cx-btns"><button class="cx-btn primary" onclick="cxOpenUpload()">⬆ Enviar documentos</button><button class="cx-btn" onclick="cxOpenAssunto()">＋ Novo assunto</button><button class="cx-btn" onclick="cxGo('atas')">✎ Redigir ata</button></div></div>
+    <div class="cx-modes" role="tablist" aria-label="O que mostrar"><button role="tab" id="cxModoDocs" onclick="cxSetModo('docs')">📄 Documentos</button><button role="tab" id="cxModoAssuntos" onclick="cxSetModo('assuntos')">📁 Assuntos (compras, doações…)</button></div>
+    <div class="cx-search"><input id="cxQ" type="search" value="${cxEsc(f.q)}" placeholder="Pesquise por título, assunto, fornecedor, nº da nota, mês, valor…" oninput="cxState.filter.q=this.value;cxFilter()" aria-label="Pesquisar no arquivo"></div>
+    <div id="cxPills"></div>
+    <div class="cx-folders" id="cxFolders" data-modo="docs"></div>
     <div class="cx-filters">
-      <label>Tipo de documento<select id="cxKind" onchange="cxState.filter.kind=this.value;cxFilter()"><option value="">Todos os tipos</option>${Object.entries(CX_KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
-      <label>Ano<select id="cxYear" onchange="cxState.filter.year=this.value;cxFilter()"><option value="">Todos os anos</option></select></label>
-      <label>Processo / assunto<select id="cxProc" onchange="cxState.filter.processo=this.value;cxFilter()"><option value="">Todos</option></select></label>
-      <label>Origem<select id="cxSource" onchange="cxState.filter.source=this.value;cxFilter()"><option value="">Enviados e emitidos</option><option value="rec">Somente enviados</option><option value="gen">Somente emitidos pelo sistema</option></select></label>
+      <label data-modo="docs">Tipo de documento<select id="cxKind" onchange="cxState.filter.kind=this.value;cxFilter()"><option value="">Todos os tipos</option>${Object.entries(CX_KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+      <label data-modo="docs">Ano<select id="cxYear" onchange="cxState.filter.year=this.value;cxFilter()"><option value="">Todos os anos</option></select></label>
+      <label data-modo="docs">Assunto<select id="cxProc" onchange="cxState.filter.assunto=this.value;cxFilter()"><option value="">Todos</option></select></label>
+      <label data-modo="docs">Agrupar por<select id="cxGrupo" onchange="cxState.filter.grupo=this.value;cxFilter()"><option value="mes">Mês</option><option value="assunto">Assunto</option><option value="categoria">Categoria</option><option value="conta">Conta</option></select></label>
+      <label data-modo="docs">Origem<select id="cxSource" onchange="cxState.filter.source=this.value;cxFilter()"><option value="">Enviados e emitidos</option><option value="rec">Somente enviados</option><option value="gen">Somente emitidos pelo sistema</option></select></label>
+      <label data-modo="assuntos">Tipo de assunto<select id="cxTipoAs" onchange="cxState.filter.tipoAs=this.value;cxFilter()"><option value="">Todos</option>${Object.entries(CX_AS_TIPOS).map(([k, v]) => `<option value="${k}">${v.ico} ${v.label}</option>`).join('')}</select></label>
+      <label data-modo="assuntos" class="cx-check" style="align-self:end"><input type="checkbox" id="cxOnlyInc" onchange="cxState.filter.onlyInc=this.checked;cxFilter()"> Mostrar só o que está incompleto</label>
     </div>
-    <div class="cx-results-head"><span id="cxSummary" role="status">Carregando…</span><button class="cx-btn small" onclick="cxGo('arquivo',{})">Limpar filtros</button></div>
+    <div id="cxViews"></div>
+    <div class="cx-results-head"><span id="cxSummary" role="status">Carregando…</span><span class="cx-btns"><button class="cx-btn small" onclick="cxSaveView()">☆ Salvar esta visão</button><button class="cx-btn small" data-modo="docs" onclick="cxExportArchive()">⬇ Planilha</button><button class="cx-btn small" onclick="cxGo('arquivo',{modo:cxState.filter.modo})">Limpar filtros</button></span></div>
     <div id="cxProcess"></div><div id="cxList"></div></div>`;
-  document.getElementById('cxKind').value = f.kind; document.getElementById('cxSource').value = f.source;
   cxLoad().then(() => { if (state.view === 'arquivo') cxFilter(); }).catch(e => { const l = document.getElementById('cxList'); if (l) l.innerHTML = `<div class="cx-empty">${cxEsc(e.message)} <button class="cx-btn small" onclick="cxLoad(true).then(cxFilter)">Tentar novamente</button></div>`; });
 }
+window.cxSetModo = m => { cx.filter.modo = m; cxFilter(); };
+window.cxSetPill = (k, v) => { cx.filter[k] = cx.filter[k] === v ? '' : v; cxFilter(); };
+const cxViewsGet = () => { try { return JSON.parse(localStorage.getItem('cei_cx_views') || '[]'); } catch { return []; } };
+const cxViewsSet = v => { try { localStorage.setItem('cei_cx_views', JSON.stringify(v.slice(0, 20))); } catch {} };
+const cxViewsBuiltin = () => [{name: 'Sem assunto (falta ligar)', f: {assunto: '__sem'}}, {name: 'Compras incompletas', f: {modo: 'assuntos', tipoAs: 'compra', onlyInc: true}}];
+window.cxSaveView = () => {
+  const name = (prompt('Dê um nome para esta visão (ex.: PDDE Básico · custeio · 2026):') || '').trim(); if (!name) return;
+  const f = cx.filter, v = cxViewsGet().filter(x => x.name !== name);
+  v.push({name, f: {q: f.q, area: f.area, kind: f.kind, year: f.year, assunto: f.assunto, source: f.source, account: f.account, nature: f.nature, grupo: f.grupo, modo: f.modo, tipoAs: f.tipoAs, onlyInc: f.onlyInc}});
+  cxViewsSet(v); cxFilter(); cxToast('Visão salva neste navegador.');
+};
+window.cxApplyView = i => { const v = cxViewsBuiltin().concat(cxViewsGet())[i]; if (!v) return; cx.filter = {...cxFilterDefault(), ...v.f}; cxFilter(); };
+window.cxDropView = i => { const n = cxViewsBuiltin().length; cxViewsSet(cxViewsGet().filter((_, j) => j !== i - n)); cxFilter(); };
+function cxDrawChrome() {
+  const f = cx.filter, put = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  document.querySelectorAll('.cx-filters [data-modo], #cxFolders, .cx-results-head [data-modo]').forEach(el => { el.hidden = el.dataset.modo !== f.modo; });
+  [['cxModoDocs', 'docs'], ['cxModoAssuntos', 'assuntos']].forEach(([id, m]) => { const b = document.getElementById(id); if (b) { b.classList.toggle('active', f.modo === m); b.setAttribute('aria-selected', f.modo === m); } });
+  const pill = (k, v, label) => `<button type="button" class="cx-pill ${f[k] === v ? 'on' : ''}" onclick="cxSetPill('${k}','${v}')">${label}</button>`;
+  put('cxPills', `<div class="cx-pillrow"><span>Conta</span><button type="button" class="cx-pill ${f.account ? '' : 'on'}" onclick="cxState.filter.account='';cxFilter()">Todas</button>${Object.entries(CX_ACCOUNTS).map(([k, v]) => pill('account', k, cxEsc(v.label))).join('')}</div><div class="cx-pillrow"><span>Recurso</span><button type="button" class="cx-pill ${f.nature ? '' : 'on'}" onclick="cxState.filter.nature='';cxFilter()">Todos</button>${pill('nature', 'custeio', 'Custeio')}${pill('nature', 'capital', 'Capital')}</div>`);
+  const views = cxViewsBuiltin().concat(cxViewsGet()), nb = cxViewsBuiltin().length;
+  put('cxViews', `<div class="cx-pillrow"><span>Minhas visões</span>${views.map((v, i) => `<span class="cx-pill view"><button type="button" onclick="cxApplyView(${i})">${cxEsc(v.name)}</button>${i >= nb ? `<button type="button" class="cx-x" aria-label="Apagar visão" onclick="cxDropView(${i})">×</button>` : ''}</span>`).join('')}</div>`);
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('cxKind', f.kind); set('cxSource', f.source); set('cxGrupo', f.grupo); set('cxTipoAs', f.tipoAs);
+  const oi = document.getElementById('cxOnlyInc'); if (oi) oi.checked = !!f.onlyInc;
+  const q = document.getElementById('cxQ'); if (q && q.value !== f.q) q.value = f.q;
+}
+const cxAsMatch = (x, id) => !id || (id === '__sem' ? cxSemAssunto(x) : x.links.includes(id));
+const cxMetaMatch = (x, f) => { if (!f.account && !f.nature) return true; const m = cxMetaOf(x); return (!f.account || m.account === f.account) && (!f.nature || m.nature === f.nature); };
 window.cxFilter = () => {
   const list = document.getElementById('cxList'); if (!list || !cx.loaded) return;
   const f = cx.filter, all = cxAllItems();
   const words = cxNorm(f.q).trim().split(/\s+/).filter(Boolean);
-  const base = all.filter(x => (!f.source || x.src === f.source) && (!f.kind || x.kind === f.kind || (f.kind === 'orcamento' && x.kind === 'cotacao')) && (!f.year || String(x.date).slice(0, 4) === f.year) && (!f.processo || x.processo === f.processo) && words.every(w => cxHaystack(x).includes(w)));
-  // pastas com contagem (consideram os outros filtros)
+  cxDrawChrome();
+  const years = [...new Set(all.map(x => String(x.date).slice(0, 4)).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
+  const ySel = document.getElementById('cxYear'); ySel.innerHTML = '<option value="">Todos os anos</option>' + years.map(y => `<option>${y}</option>`).join(''); ySel.value = f.year;
+  const sem = all.filter(cxSemAssunto).length;
+  const pSel = document.getElementById('cxProc');
+  pSel.innerHTML = '<option value="">Todos</option>' + `<option value="__sem">Sem assunto — falta ligar (${sem})</option>` + Object.entries(CX_AS_TIPOS).map(([k, v]) => { const g = cxAsList().filter(a => a.tipo === k); return g.length ? `<optgroup label="${v.label}">${g.map(a => `<option value="${cxEsc(a.id)}">${cxEsc(a.title)}</option>`).join('')}</optgroup>` : ''; }).join('');
+  pSel.value = f.assunto;
+  if (f.modo === 'assuntos') return cxDrawAssuntos(all, words, sem);
+  const base = all.filter(x => (!f.source || x.src === f.source) && (!f.kind || x.kind === f.kind || (f.kind === 'orcamento' && x.kind === 'cotacao')) && (!f.year || String(x.date).slice(0, 4) === f.year) && cxAsMatch(x, f.assunto) && cxMetaMatch(x, f) && words.every(w => cxHaystack(x).includes(w)));
   const counts = {}; base.forEach(x => { counts[x.area] = (counts[x.area] || 0) + 1; });
   document.getElementById('cxFolders').innerHTML = `<button class="cx-folder ${f.area ? '' : 'active'}" onclick="cxState.filter.area='';cxFilter()"><b>Todas as pastas</b><small>${base.length} item(ns)</small></button>` +
     Object.entries(CX_AREAS).map(([k, v]) => `<button class="cx-folder ${f.area === k ? 'active' : ''}" onclick="cxState.filter.area='${k}';cxFilter()"><b>${v.label}</b><small title="${v.hint}">${counts[k] || 0} item(ns) · ${v.hint}</small></button>`).join('');
   const items = base.filter(x => !f.area || x.area === f.area).sort((x, y) => String(y.date).localeCompare(String(x.date)) || String(x.title).localeCompare(String(y.title)));
-  // selects dinâmicos
-  const years = [...new Set(all.map(x => String(x.date).slice(0, 4)).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
-  const ySel = document.getElementById('cxYear'); ySel.innerHTML = '<option value="">Todos os anos</option>' + years.map(y => `<option>${y}</option>`).join(''); ySel.value = f.year;
-  const procs = [...new Set(all.map(x => x.processo).filter(Boolean))].sort((p, q) => p.localeCompare(q, 'pt-BR'));
-  const pSel = document.getElementById('cxProc'); pSel.innerHTML = '<option value="">Todos</option>' + procs.map(p => `<option value="${cxEsc(p)}">${cxEsc(p)}</option>`).join(''); pSel.value = f.processo;
-  document.getElementById('cxSummary').textContent = `${items.length} item(ns) encontrado(s)${f.area ? ' em ' + CX_AREAS[f.area].label : ''}`;
-  document.getElementById('cxProcess').innerHTML = f.processo ? cxProcessHTML(f.processo, all) : '';
+  cx.lastItems = items;
+  const fin = (xs, mv) => xs.filter(x => x.r?.fin?.move === mv).reduce((s, x) => s + x.r.fin.amount, 0);
+  const gasto = fin(items, 'saida'), recebido = fin(items, 'entrada');
+  document.getElementById('cxSummary').innerHTML = `${items.length} item(ns) encontrado(s)${f.area ? ' em ' + cxEsc(CX_AREAS[f.area].label) : ''}${gasto ? ` · despesas <b>${cxMoney(gasto)}</b>` : ''}${recebido ? ` · entradas <b>${cxMoney(recebido)}</b>` : ''}`;
+  document.getElementById('cxProcess').innerHTML = f.assunto ? cxAsHeaderHTML(f.assunto, all) : '';
   if (!items.length) { list.innerHTML = `<div class="cx-empty">${all.length ? 'Nenhum item corresponde à pesquisa. Tente outras palavras ou limpe os filtros.' : 'O arquivo ainda está vazio. Clique em “Enviar documentos” para guardar o primeiro arquivo.'}</div>`; return; }
-  let html = '', last = '';
-  for (const x of items.slice(0, 400)) {
-    const [y, m] = String(x.date).split('-'); const g = y && m ? `${cxMonthName(m)} de ${y}` : 'Sem data';
-    if (g !== last) { html += `<div class="cx-group-title">${cxEsc(g)}</div>`; last = g; }
-    html += cxItemHTML(x);
-  }
+  const keyOf = {
+    mes: x => { const [y, m] = String(x.date).split('-'); return y && m ? `${cxMonthName(m)} de ${y}` : 'Sem data'; },
+    assunto: x => x.links.length ? x.links.map(id => cxAsMap().get(id)?.title).filter(Boolean).join(' · ') : 'Sem assunto',
+    categoria: x => cxMetaOf(x).category || 'Sem categoria',
+    conta: x => CX_ACCOUNTS[cxMetaOf(x).account]?.label || 'Sem conta',
+  }[f.grupo] || (() => '');
+  const groups = new Map();
+  for (const x of items.slice(0, 400)) { const k = keyOf(x); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x); }
+  let keys = [...groups.keys()];
+  if (f.grupo !== 'mes') keys.sort((p, q) => (/^Sem /.test(p) - /^Sem /.test(q)) || p.localeCompare(q, 'pt-BR'));
+  let html = '';
+  for (const k of keys) { const xs = groups.get(k), g = fin(xs, 'saida'); html += `<div class="cx-group-title">${cxEsc(k)}${f.grupo !== 'mes' ? ` <small>· ${xs.length} item(ns)${g ? ' · despesas ' + cxMoney(g) : ''}</small>` : ''}</div>` + xs.map(x => cxItemHTML(x)).join(''); }
   if (items.length > 400) html += '<p class="muted">Mostrando os 400 mais recentes. Refine a pesquisa para ver os demais.</p>';
   list.innerHTML = html;
 };
-function cxProcessHTML(proc, all) {
-  const docs = all.filter(x => x.processo === proc);
-  const has = k => docs.filter(x => x.kind === k || (k === 'orcamento' && x.kind === 'cotacao')).length;
-  const spent = docs.filter(x => x.r?.fin?.move === 'saida').reduce((s, x) => s + x.r.fin.amount, 0);
-  const steps = [['orcamento', 'Orçamentos'], ['pesquisa_precos', 'Mapa / pesquisa de preços'], ['ata_compra', 'Ata de aprovação da compra'], ['nota_fiscal', 'Nota fiscal'], ['comprovante', 'Comprovante de pagamento']];
-  return `<div class="cx-process"><h3>Processo: ${cxEsc(proc)}</h3><div class="cx-checklist">${steps.map(([k, l]) => { const n = has(k); return `<span class="cx-chip ${n ? 'ok' : 'warn'}">${n ? '✓' : '○'} ${l}${n > 1 ? ' (' + n + ')' : ''}</span>`; }).join('')}</div>
-    <p class="muted" style="margin:8px 0 0">${docs.length} documento(s) neste processo${spent ? ' · despesas lançadas: <b>' + cxMoney(spent) + '</b>' : ''}. <button class="cx-btn small" onclick="cxOpenUpload({processo:${cxEsc(JSON.stringify(proc))},area:'compras'})">+ Adicionar documento a este processo</button></p></div>`;
+function cxDrawAssuntos(all, words, sem) {
+  const f = cx.filter, list = document.getElementById('cxList');
+  const rows = cxAsList().filter(a => (!f.tipoAs || a.tipo === f.tipoAs) && (!f.account || a.account === f.account) && (!f.nature || a.nature === f.nature) && words.every(w => cxNorm([a.title, a.supplier, a.category, CX_AS_TIPOS[a.tipo]?.label].join(' ')).includes(w)))
+    .map(a => ({a, st: cxAsStats(a, all)})).filter(r => !f.onlyInc || r.st.falta.length)
+    .sort((x, y) => String(y.st.last).localeCompare(String(x.st.last)) || x.a.title.localeCompare(y.a.title, 'pt-BR'));
+  const spent = rows.reduce((s, r) => s + r.st.spent, 0);
+  document.getElementById('cxSummary').innerHTML = `${rows.length} assunto(s)${spent ? ` · despesas <b>${cxMoney(spent)}</b>` : ''}`;
+  document.getElementById('cxProcess').innerHTML = sem ? `<div class="cx-process"><b>${sem} documento(s) de compra sem assunto.</b> <button class="cx-btn small" onclick="cxGo('arquivo',{assunto:'__sem'})">Ver e ligar</button></div>` : '';
+  list.innerHTML = rows.length ? rows.map(r => cxAsCardHTML(r.a, all, false)).join('') : `<div class="cx-empty">${cxAsList().length ? 'Nenhum assunto com esses filtros.' : 'Nenhum assunto ainda. Clique em “＋ Novo assunto” para cadastrar uma compra, doação, evento ou serviço. Ao enviar um documento você também pode criar o assunto na hora.'}</div>`;
 }
+window.cxExportArchive = () => {
+  const items = cx.lastItems || [], q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [['Data', 'Documento', 'Tipo', 'Pasta', 'Assunto', 'Conta', 'Recurso', 'Categoria', 'Fornecedor', 'Nº documento', 'Movimento', 'Valor (R$)', 'Arquivo'].map(q).join(';')]
+    .concat(items.map(x => { const m = cxMetaOf(x), fin = x.r?.fin; return [cxBR(x.date), x.title, x.r ? cxKindLabel(x.r) : (CX_GEN_KIND[x.gen] || 'Documento emitido'), CX_AREAS[x.area]?.label || '', x.processo, CX_ACCOUNTS[m.account]?.label || '', CX_NATURES[m.nature] || '', m.category, m.supplier, fin?.docNumber || '', fin ? CX_MOVES[fin.move] : '', fin ? ((fin.move === 'saida' ? -1 : 1) * fin.amount / 100).toFixed(2).replace('.', ',') : '', x.r?.file?.name || ''].map(q).join(';'); }));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], {type: 'text/csv;charset=utf-8'});
+  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `arquivo_${cxToday()}.csv`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+};
 function cxItemHTML(x, compact = false) {
   if (x.src === 'gen') {
     const actions = x.gen === 'oficio' ? `<button class="cx-btn small" onclick="printOficio('${x.id}')">Visualizar / imprimir</button><button class="cx-btn small" onclick="editOficio('${x.id}')">Editar</button>${x.signed ? `<button class="cx-btn small" onclick="viewSignedPdf('${x.id}')">PDF assinado</button>` : ''}`
       : `<button class="cx-btn small" onclick="previewGenerated('${x.id}')">Visualizar / imprimir</button><button class="cx-btn small" onclick="cxEditGenerated('${x.id}')">Editar</button>`;
     return `<article class="cx-item"><div><div class="cx-chips"><span class="cx-chip">${cxEsc(CX_AREAS[x.area]?.label || '')}</span><span class="cx-chip">Emitido · ${cxEsc(CX_GEN_KIND[x.gen] || 'Documento')}</span>${x.gen === 'oficio' ? (x.signed ? '<span class="cx-chip ok">✓ Assinado</span>' : '<span class="cx-chip warn">Sem PDF assinado</span>') : ''}</div><h4>${cxEsc(x.title)}</h4><div class="cx-meta"><span>${cxEsc(cxBR(x.date) || 'Sem data')}</span>${x.notes ? `<span>${cxEsc(x.notes)}</span>` : ''}</div></div><div class="cx-actions">${actions}</div></article>`;
   }
-  const r = x.r, fin = r.fin, pub = cx.publicIds.has(r.id), ro = r.seeded || r.readOnly;
+  const r = x.r, fin = r.fin, pub = cx.publicIds.has(r.id), ro = r.seeded || r.readOnly, links = x.links || cxLinksOf(r);
   const isAta = r.kind === 'ata' || r.kind === 'ata_compra', typed = r.typed || (r.kind === 'ata' && r.body);
   const finTxt = fin ? `<span class="cx-money ${fin.move === 'entrada' ? 'in' : fin.move === 'saida' ? 'out' : ''}">${fin.move === 'saida' ? '− ' : fin.move === 'entrada' ? '+ ' : ''}${cxMoney(fin.amount)}</span><span>${cxEsc(CX_ACCOUNTS[fin.account]?.label || '')}${fin.nature ? ' · ' + CX_NATURES[fin.nature] : ''}${fin.category ? ' · ' + cxEsc(fin.category) : ''}${fin.move === 'saldo_extrato' ? ' · saldo do extrato' : fin.move === 'saldo_inicial' ? ' · saldo inicial' : ''}</span>` : '';
   const more = compact ? [] : [
@@ -482,7 +700,7 @@ function cxItemHTML(x, compact = false) {
     r.signedFile ? `<a href="/api/app/documents/${r.id}/file?signed=1">⬇ Baixar PDF assinado</a>` : '',
     r.file && !r.internal ? `<button onclick="cxTogglePublic('${r.id}')">${pub ? '🔒 Retirar da página pública' : '🌐 Publicar na página pública'}</button>` : '',
     pub ? `<button onclick="cxOpenPublish('${r.id}')">🏷 Mudar seção na página pública</button>` : '',
-    r.processo ? '' : (!ro ? `<button onclick="cxOpenEdit('${r.id}')">📁 Incluir em um processo</button>` : ''),
+    !ro ? `<button onclick="cxOpenEdit('${r.id}')">📁 ${links.length ? 'Mudar o assunto' : 'Ligar a um assunto'}</button>` : '',
     !ro ? `<button class="danger" onclick="cxDelete('${r.id}')">🗑 Excluir</button>` : '',
   ].filter(Boolean);
   if (typed && more.length) more[0] = `<button onclick="cxOpenMinute('${r.id}')">✎ Editar ata</button>`;
@@ -493,7 +711,7 @@ function cxItemHTML(x, compact = false) {
     r.signedFile ? `<a class="cx-btn small" href="/api/app/documents/${r.id}/file?signed=1&view=1" target="_blank" rel="noopener">PDF assinado</a>` : '',
     more.length ? `<details class="cx-more"><summary class="cx-btn small" aria-label="Mais ações">⋯ Mais</summary><div class="cx-more-menu">${more.join('')}</div></details>` : '',
   ].join('');
-  return `<article class="cx-item"><div><div class="cx-chips"><span class="cx-chip">${cxEsc(CX_AREAS[x.area]?.label || '')}</span><span class="cx-chip">${cxEsc(cxKindLabel(r))}</span>${isAta && typed ? (r.signedFile ? '<span class="cx-chip ok">✓ Assinada</span>' : '<span class="cx-chip warn">Aguardando assinatura</span>') : ''}${pub ? `<span class="cx-chip pub">🌐 Público · ${cxEsc(CX_PUBCATS[cx.publicMeta?.[r.id]?.category || cxGuessPub(r)]?.label || '')}</span>` : ''}${r.processo ? `<button class="cx-chip" onclick="cxGo('arquivo',{processo:${cxEsc(JSON.stringify(r.processo))}})" title="Ver todos os documentos deste processo">📁 ${cxEsc(r.processo)}</button>` : ''}</div>
+  return `<article class="cx-item"><div><div class="cx-chips"><span class="cx-chip">${cxEsc(CX_AREAS[x.area]?.label || '')}</span><span class="cx-chip">${cxEsc(cxKindLabel(r))}</span>${isAta && typed ? (r.signedFile ? '<span class="cx-chip ok">✓ Assinada</span>' : '<span class="cx-chip warn">Aguardando assinatura</span>') : ''}${pub ? `<span class="cx-chip pub">🌐 Público · ${cxEsc(CX_PUBCATS[cx.publicMeta?.[r.id]?.category || cxGuessPub(r)]?.label || '')}</span>` : ''}${links.map(id => { const as = cxAsMap().get(id); return as ? `<button class="cx-chip" onclick="cxGo('arquivo',{assunto:${cxEsc(JSON.stringify(id))}})" title="Ver todos os documentos deste assunto">📁 ${cxEsc(as.title)}</button>` : ''; }).join('')}${!links.length && r.semAssunto ? '<span class="cx-chip" title="Marcado como “Não é de um assunto”">Sem assunto</span>' : ''}${cxSemAssunto({r, kind: r.kind, links}) ? '<span class="cx-chip warn" title="Documento de compra sem assunto: ligue a uma compra">Falta ligar a um assunto</span>' : ''}</div>
     <h4>${cxEsc(r.title)}</h4><div class="cx-meta"><span>${cxEsc(cxBR(r.date) || r.competence || 'Sem data')}</span>${finTxt}${fin?.supplier ? `<span>${cxEsc(fin.supplier)}${fin.docNumber ? ' · nº ' + cxEsc(fin.docNumber) : ''}</span>` : ''}${r.file ? `<span>📎 ${cxEsc(r.file.originalName || r.file.name)}</span>` : (typed ? '<span>Ata redigida no sistema</span>' : '')}</div>
     ${!compact && r.notes ? `<div class="cx-notes">${cxEsc(r.notes)}</div>` : ''}${!compact && r.tags ? `<div class="cx-notes muted">Palavras-chave: ${cxEsc(r.tags)}</div>` : ''}</div><div class="cx-actions">${actions}</div></article>`;
 }
@@ -516,7 +734,6 @@ function cxModal(html) {
 }
 window.cxCloseModal = () => { const m = document.getElementById('cxModal'); if (m) { m.classList.add('hidden'); m.innerHTML = ''; } };
 const cxOptions = (obj, sel) => Object.entries(obj).map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${typeof v === 'string' ? v : v.label}</option>`).join('');
-const cxProcList = () => `<datalist id="cxProcList">${[...new Set(cx.records.map(r => r.processo).filter(Boolean))].map(p => `<option value="${cxEsc(p)}">`).join('')}</datalist>`;
 function cxFinFieldset(fin, kind) {
   const f = fin || {}, move = f.move || CX_KIND_MOVE[kind] || 'saida', account = f.account || 'SICOOB';
   return `<label class="cx-check"><input type="checkbox" name="hasFin" ${fin || CX_KIND_MOVE[kind] ? 'checked' : ''} onchange="cxToggleFin(this.form)"> Registrar valor no Financeiro (entra no cálculo de saldo)</label>
@@ -560,16 +777,17 @@ function cxMetaFields(r, preset = {}) {
   return `<label>Tipo de documento *<select name="kind" required onchange="cxKindChanged(this.form)"><option value="">— escolha —</option>${cxOptions(CX_KINDS, CX_KINDS[kind] ? kind : (kind === 'cotacao' ? 'orcamento' : ''))}</select></label>
     <label>Pasta *<select name="area" required><option value="">— escolha —</option>${cxOptions(CX_AREAS, area)}</select></label>
     <label>Data do documento *<input name="date" type="date" required value="${cxEsc(r?.date || (r?.competence ? r.competence + '-01' : '') || preset.date || cxToday())}"></label>
-    <label>Processo / assunto<input name="processo" list="cxProcList" maxlength="160" value="${cxEsc(r?.processo || preset.processo || '')}" placeholder="Ex.: Compra de ventiladores 2026"></label>
     <label class="full" data-title>Título *<input name="title" maxlength="200" value="${cxEsc(r?.title || '')}" placeholder="Ex.: Orçamento — Loja ABC"></label>
     <label class="full">Descrição / observações<textarea name="notes" rows="2" maxlength="3000" placeholder="Resumo, decisões, quem participou… (ajuda a encontrar depois)">${cxEsc(r?.notes || '')}</textarea></label>
-    <label class="full">Palavras-chave<input name="tags" maxlength="300" value="${cxEsc(r?.tags || '')}" placeholder="Ex.: ventilador, sala 3, PDDE"></label>${cxProcList()}`;
+    <label class="full">Palavras-chave<input name="tags" maxlength="300" value="${cxEsc(r?.tags || '')}" placeholder="Ex.: ventilador, sala 3, PDDE"></label>
+    ${cxAsPickerHTML(r, preset)}`;
 }
 window.cxKindChanged = form => {
   const k = form.kind.value;
   if (CX_KIND_AREA[k] && !form.area.dataset.touched) form.area.value = CX_KIND_AREA[k];
   if (form.hasFin && CX_KIND_MOVE[k] && !form.hasFin.dataset.touched) { form.hasFin.checked = true; form.finMove.value = CX_KIND_MOVE[k]; }
   if (form.hasFin) cxToggleFin(form);
+  cxAsRefresh(form);
   const drop = form.querySelector('.cx-drop'); if (drop) drop.hidden = k === 'lancamento';
 };
 
@@ -594,6 +812,7 @@ window.cxOpenUpload = (preset = {}) => {
   ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', e => { const dt = new DataTransfer(); [...e.dataTransfer.files].forEach(f => dt.items.add(f)); form.files.files = dt.files; cxFilesPicked(form); });
   if (preset.kind) cxKindChanged(form); else cxToggleFin(form);
+  cxAsRefresh(form); cxAsInherit(form, cxAsMap().get((preset.assuntos || [])[0]));
 };
 window.cxFilesPicked = form => {
   const files = [...form.files.files];
@@ -605,13 +824,14 @@ window.cxFilesPicked = form => {
 window.cxSubmitUpload = async e => {
   e.preventDefault();
   const form = e.target, files = [...form.files.files], status = document.getElementById('cxUpStatus'), btn = form.querySelector('button[type=submit]');
-  let fin;
+  let fin, asr;
   try {
     fin = cxReadFin(form);
     if (!form.kind.value || !form.area.value || !form.date.value) throw new Error('Escolha o tipo, a pasta e a data.');
     if (!files.length && !fin) throw new Error('Escolha ao menos um arquivo (ou marque “Registrar valor no Financeiro” para um lançamento sem documento).');
     if (files.length > 1 && fin) throw new Error('Para lançar valores, envie um arquivo por vez (cada nota tem o seu valor).');
     if (files.length <= 1 && !form.title.value.trim()) throw new Error('Informe o título do documento.');
+    asr = cxAsCheck(form, form.kind.value);
     const big = files.find(f => f.size > 20 * 1048576); if (big) throw new Error(`O arquivo “${big.name}” passa de 20 MB.`);
   } catch (err) { status.textContent = ''; return alert(err.message); }
   btn.disabled = true; let ok = 0;
@@ -620,7 +840,8 @@ window.cxSubmitUpload = async e => {
     for (const [i, file] of list.entries()) {
       status.textContent = list.length > 1 ? `Enviando ${i + 1} de ${list.length}: ${file.name}…` : 'Enviando…';
       const data = new FormData();
-      for (const k of ['kind', 'area', 'date', 'processo', 'notes', 'tags']) data.append(k, form[k].value);
+      for (const k of ['kind', 'area', 'date', 'notes', 'tags']) data.append(k, form[k].value);
+      data.append('processo', asr.processo); data.append('assuntos', JSON.stringify(asr.assuntos)); data.append('semAssunto', asr.semAssunto ? '1' : '');
       data.append('title', form.title.value.trim() && list.length === 1 ? form.title.value.trim() : (file ? file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ') : form.title.value.trim()));
       if (fin) data.append('fin', JSON.stringify(fin));
       if (file) data.append('file', file);
@@ -636,15 +857,16 @@ window.cxOpenEdit = id => {
   <form class="cx-form" onsubmit="cxSubmitEdit(event,'${r.id}')">${r.file ? `<p class="hint full">📎 ${cxEsc(r.file.originalName || r.file.name)} — para trocar o arquivo, exclua este registro e envie novamente.</p>` : ''}
     ${cxMetaFields(r)}${cxFinFieldset(r.fin, '')}
     <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar alterações</button></div></form>`);
-  const form = m.querySelector('form'); form.area.dataset.touched = '1'; form.hasFin.dataset.touched = '1';
+  const form = m.querySelector('form'); form.area.dataset.touched = '1'; form.hasFin.dataset.touched = '1'; form.finAccount.dataset.touched = '1';
   if (r.fin?.category) form.finCategory.dataset.value = r.fin.category;
-  cxToggleFin(form);
+  cxToggleFin(form); cxAsRefresh(form);
 };
 window.cxSubmitEdit = async (e, id) => {
   e.preventDefault(); const form = e.target;
   try {
     const fin = cxReadFin(form);
-    const body = {central: true, kind: form.kind.value, area: form.area.value, date: form.date.value, title: form.title.value.trim(), processo: form.processo.value, notes: form.notes.value, tags: form.tags.value, fin};
+    const asr = cxAsCheck(form, form.kind.value);
+    const body = {central: true, kind: form.kind.value, area: form.area.value, date: form.date.value, title: form.title.value.trim(), ...asr, notes: form.notes.value, tags: form.tags.value, fin};
     await cxRequest('/api/app/documents/' + id, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
     cxCloseModal(); await cxLoad(true); cxToast('Informações atualizadas.'); render();
   } catch (err) { alert(err.message); }
@@ -763,16 +985,16 @@ window.cxOpenMinute = (id, preset = {}) => {
     <label class="cx-check"><input type="checkbox" name="listaPresenca" ${m.listaPresenca ? 'checked' : ''}> Incluir lista de presença com espaço para assinatura de cada participante</label>
     <div class="cx-signers" id="cxSigners"><b style="font-size:13px">Quem assina a ata</b>${cxSignerRows(signers)}<div><button type="button" class="cx-btn small" onclick="document.getElementById('cxSigners').insertAdjacentHTML('beforeend',cxSignerRowHTML())">+ Adicionar assinatura</button></div></div>
     <label class="full">Título no arquivo<input name="title" maxlength="200" value="${cxEsc(r?.title || '')}" placeholder="Gerado automaticamente: Ata nº … — Reunião … — data" data-auto="${r ? '' : '1'}"></label>
-    <label>Processo / assunto<input name="processo" list="cxProcList" maxlength="160" value="${cxEsc(r?.processo || preset.processo || '')}" placeholder="Ex.: Compra de ventiladores 2026"></label>
+    ${cxAsPickerHTML(r, preset)}
     <label>Palavras-chave<input name="tags" maxlength="300" value="${cxEsc(r?.tags || '')}"></label>
-    <label class="cx-check"><input type="checkbox" name="compra" ${r?.kind === 'ata_compra' ? 'checked' : ''}> É uma ata de aprovação de compra (aparece no processo de compra)</label>
-    <label class="full">Observações internas (não saem na impressão)<input name="notes" maxlength="3000" value="${cxEsc(r?.notes || '')}"></label>${cxProcList()}
+    <label class="cx-check"><input type="checkbox" name="compra" ${r?.kind === 'ata_compra' ? 'checked' : ''} onchange="cxAsRefresh(this.form)"> É uma ata de aprovação de compra (aparece no assunto da compra)</label>
+    <label class="full">Observações internas (não saem na impressão)<input name="notes" maxlength="3000" value="${cxEsc(r?.notes || '')}"></label>
     <div class="actions full"><button type="button" onclick="cxCloseModal()">Cancelar</button><button type="submit" value="save">Salvar</button><button class="primary" type="submit" value="print">Salvar e imprimir</button></div>
   </form>`);
   const form = document.getElementById('cxAtaForm');
   form.addEventListener('submit', ev => { form.dataset.go = ev.submitter?.value || 'save'; }, true);
   form.title.addEventListener('input', () => { form.title.dataset.auto = form.title.value ? '' : '1'; });
-  cxEnablePaste('cxMinuteBody');
+  cxEnablePaste('cxMinuteBody'); cxAsRefresh(form);
 };
 window.cxAtaTipoChanged = form => {
   form.querySelector('[data-tipo-outro]').hidden = form.tipo.value !== 'outra';
@@ -803,8 +1025,9 @@ window.cxSubmitMinute = async (e, id) => {
   const meta = cxReadMinute(form), date = form.date.value;
   if (meta.tipo === 'outra' && !meta.tipoOutro) meta.tipoOutro = '';
   const title = form.title.value.trim() || cxAtaTitle({...meta, date});
+  let asr; try { asr = cxAsCheck(form, form.compra.checked ? 'ata_compra' : 'ata'); } catch (err) { return alert(err.message); }
   const popup = print ? window.open('', '_blank') : null; if (popup) popup.document.write('<p>Salvando ata…</p>');
-  const body = {central: true, kind: form.compra.checked ? 'ata_compra' : 'ata', area: form.compra.checked ? 'compras' : CX_ATA_TIPOS[meta.tipo].area, date, title, processo: form.processo.value, notes: form.notes.value, tags: form.tags.value,
+  const body = {central: true, kind: form.compra.checked ? 'ata_compra' : 'ata', area: form.compra.checked ? 'compras' : CX_ATA_TIPOS[meta.tipo].area, date, title, ...asr, notes: form.notes.value, tags: form.tags.value,
     presentes: meta.participantes.slice(0, 3000), body: cxSanitize(ed.innerHTML), meta};
   try {
     const saved = await cxRequest(id ? '/api/app/documents/' + id : '/api/app/documents', {method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
@@ -1631,7 +1854,7 @@ function cxDrawFinance(a) {
   const years = [...new Set(cx.records.filter(r => r.fin).map(r => String(r.date).slice(0, 4)).concat(String(new Date().getFullYear())))].sort().reverse();
   const {accounts} = cxFinance(cx.finYear), sel = cx.finAccount, ff = cx.finFilter;
   const acc = sel ? accounts.find(x => x.account === sel) : null;
-  const list = (acc ? acc.list : accounts.flatMap(x => x.list)).filter(r => (!ff.move || r.fin.move === ff.move) && (!ff.nature || (r.fin.nature || '') === ff.nature) && (!ff.category || r.fin.category === ff.category)).sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  const list = (acc ? acc.list : accounts.flatMap(x => x.list)).filter(r => (!ff.move || r.fin.move === ff.move) && (!ff.nature || (r.fin.nature || '') === ff.nature) && (!ff.category || r.fin.category === ff.category) && cxFinMatch(r, ff)).sort((x, y) => String(y.date).localeCompare(String(x.date)));
   const outs = (acc ? acc.list : accounts.flatMap(x => x.list)).filter(r => r.fin.move === 'saida');
   const byCat = {}; outs.forEach(r => { const k = r.fin.category || 'Sem categoria'; byCat[k] = (byCat[k] || 0) + r.fin.amount; });
   const catRows = Object.entries(byCat).sort((x, y) => y[1] - x[1]); const maxCat = Math.max(1, ...catRows.map(x => x[1]));
@@ -1645,9 +1868,15 @@ function cxDrawFinance(a) {
     <div class="cx-cols"><div class="panel"><h2>${acc ? cxEsc(CX_ACCOUNTS[acc.account].label) : 'Resumo do ano'} · ${cxEsc(cx.finYear)}</h2><div class="cx-summary-grid"><div>Saldo inicial<b>${cxMoney(tot.initial)}</b></div><div>Entradas<b style="color:var(--cx-ok)">${cxMoney(tot.inflow)}</b></div><div>Despesas<b style="color:var(--cx-bad)">${cxMoney(tot.outflow)}</b></div><div>Saldo calculado<b>${cxMoney(tot.balance)}</b></div></div>
       ${(tot.nat.custeio || tot.nat.capital) ? `<div class="cx-summary-grid"><div>Saldo custeio<b>${cxMoney(tot.nat.custeio)}</b></div><div>Saldo capital<b>${cxMoney(tot.nat.capital)}</b></div></div>` : ''}${acc && acc.recon ? `<p style="margin-top:10px">${reconChip(acc)}</p>` : ''}</div>
       <div class="panel"><h2>Despesas por categoria</h2>${catRows.length ? `<div class="cx-bars">${catRows.map(([k, v]) => `<div class="cx-bar"><span>${cxEsc(k)}</span><div class="track"><div class="fill" style="width:${Math.max(2, v / maxCat * 100)}%"></div></div><b class="cx-num">${cxMoney(v)}</b></div>`).join('')}</div>` : '<p class="muted">Nenhuma despesa lançada.</p>'}</div></div>
-    <div class="panel"><div class="cx-head"><h2>Lançamentos</h2><div class="cx-btns"><select onchange="cxState.finFilter.move=this.value;render()"><option value="">Todos os movimentos</option>${cxOptions(CX_MOVES, ff.move)}</select><select onchange="cxState.finFilter.nature=this.value;render()"><option value="">Custeio e capital</option><option value="custeio" ${ff.nature === 'custeio' ? 'selected' : ''}>Custeio</option><option value="capital" ${ff.nature === 'capital' ? 'selected' : ''}>Capital</option></select><select onchange="cxState.finFilter.category=this.value;render()"><option value="">Todas as categorias</option>${[...CX_CATS.saida, ...CX_CATS.entrada].map(c => `<option ${c === ff.category ? 'selected' : ''}>${cxEsc(c)}</option>`).join('')}</select><button class="cx-btn" onclick="cxExportCSV()">⬇ Planilha (CSV)</button></div></div>
-    ${list.length ? `<div class="cx-table-wrap"><table class="cx-table"><thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th>Natureza / categoria</th><th class="r">Valor</th><th></th></tr></thead><tbody>${list.map(r => `<tr><td>${cxEsc(cxBR(r.date))}</td><td><b>${cxEsc(r.title)}</b>${r.fin.supplier ? `<br><span class="muted">${cxEsc(r.fin.supplier)}${r.fin.docNumber ? ' · nº ' + cxEsc(r.fin.docNumber) : ''}</span>` : ''}${r.processo ? `<br><button class="cx-chip" onclick="cxGo('arquivo',{processo:${cxEsc(JSON.stringify(r.processo))}})">📁 ${cxEsc(r.processo)}</button>` : ''}</td><td>${cxEsc(CX_ACCOUNTS[r.fin.account]?.label)}${r.fin.move === 'saldo_extrato' ? `<br><span class="muted">${cxEsc(CX_STATEMENTS[r.fin.statementType] || '')}</span>` : ''}</td><td>${cxEsc(CX_MOVES[r.fin.move])}${r.fin.nature ? '<br>' + CX_NATURES[r.fin.nature] : ''}${r.fin.category ? '<br><span class="muted">' + cxEsc(r.fin.category) + '</span>' : ''}</td><td class="r"><span class="cx-money ${r.fin.move === 'entrada' ? 'in' : r.fin.move === 'saida' ? 'out' : ''}">${r.fin.move === 'saida' ? '− ' : r.fin.move === 'entrada' ? '+ ' : ''}${cxMoney(r.fin.amount)}</span></td><td style="white-space:nowrap">${cxViewable(r.file) ? `<a class="cx-btn small" href="/api/app/documents/${r.id}/file?view=1" target="_blank" rel="noopener">Ver</a> ` : ''}<button class="cx-btn small" onclick="cxOpenEdit('${r.id}')">Editar</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="cx-empty">Nenhum lançamento neste filtro. Lance notas fiscais, repasses e saldos de extrato pelos botões acima, ou marque “Registrar valor no Financeiro” ao enviar um documento.</div>'}
+    <div class="panel"><div class="cx-head"><h2>Lançamentos</h2><div class="cx-btns"><select onchange="cxState.finFilter.move=this.value;render()"><option value="">Todos os movimentos</option>${cxOptions(CX_MOVES, ff.move)}</select><select onchange="cxState.finFilter.nature=this.value;render()"><option value="">Custeio e capital</option><option value="custeio" ${ff.nature === 'custeio' ? 'selected' : ''}>Custeio</option><option value="capital" ${ff.nature === 'capital' ? 'selected' : ''}>Capital</option></select><select onchange="cxState.finFilter.category=this.value;render()"><option value="">Todas as categorias</option>${[...CX_CATS.saida, ...CX_CATS.entrada].map(c => `<option ${c === ff.category ? 'selected' : ''}>${cxEsc(c)}</option>`).join('')}</select><select onchange="cxState.finFilter.assunto=this.value;render()"><option value="">Todos os assuntos</option><option value="__sem" ${ff.assunto === '__sem' ? 'selected' : ''}>Sem assunto</option>${cxAsList().map(x => `<option value="${cxEsc(x.id)}" ${x.id === ff.assunto ? 'selected' : ''}>${cxEsc(x.title)}</option>`).join('')}</select><input type="search" placeholder="Buscar nota, fornecedor…" value="${cxEsc(ff.q || '')}" onchange="cxState.finFilter.q=this.value;render()" aria-label="Buscar lançamento"><button class="cx-btn" onclick="cxExportCSV()">⬇ Planilha (CSV)</button></div></div>
+    <p class="muted" style="margin:4px 0 8px">${list.length} lançamento(s) neste filtro${(() => { const o = list.filter(r => r.fin.move === 'saida').reduce((t, r) => t + r.fin.amount, 0), i = list.filter(r => r.fin.move === 'entrada').reduce((t, r) => t + r.fin.amount, 0); return (o ? ` · despesas <b>${cxMoney(o)}</b>` : '') + (i ? ` · entradas <b>${cxMoney(i)}</b>` : ''); })()}</p>
+    ${list.length ? `<div class="cx-table-wrap"><table class="cx-table"><thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th>Natureza / categoria</th><th class="r">Valor</th><th></th></tr></thead><tbody>${list.map(r => `<tr><td>${cxEsc(cxBR(r.date))}</td><td><b>${cxEsc(r.title)}</b>${r.fin.supplier ? `<br><span class="muted">${cxEsc(r.fin.supplier)}${r.fin.docNumber ? ' · nº ' + cxEsc(r.fin.docNumber) : ''}</span>` : ''}${cxLinksOf(r).map(id => `<br><button class="cx-chip" onclick="cxGo('arquivo',{assunto:${cxEsc(JSON.stringify(id))}})">📁 ${cxEsc(cxAsMap().get(id)?.title || '')}</button>`).join('')}</td><td>${cxEsc(CX_ACCOUNTS[r.fin.account]?.label)}${r.fin.move === 'saldo_extrato' ? `<br><span class="muted">${cxEsc(CX_STATEMENTS[r.fin.statementType] || '')}</span>` : ''}</td><td>${cxEsc(CX_MOVES[r.fin.move])}${r.fin.nature ? '<br>' + CX_NATURES[r.fin.nature] : ''}${r.fin.category ? '<br><span class="muted">' + cxEsc(r.fin.category) + '</span>' : ''}</td><td class="r"><span class="cx-money ${r.fin.move === 'entrada' ? 'in' : r.fin.move === 'saida' ? 'out' : ''}">${r.fin.move === 'saida' ? '− ' : r.fin.move === 'entrada' ? '+ ' : ''}${cxMoney(r.fin.amount)}</span></td><td style="white-space:nowrap">${cxViewable(r.file) ? `<a class="cx-btn small" href="/api/app/documents/${r.id}/file?view=1" target="_blank" rel="noopener">Ver</a> ` : ''}<button class="cx-btn small" onclick="cxOpenEdit('${r.id}')">Editar</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="cx-empty">Nenhum lançamento neste filtro. Lance notas fiscais, repasses e saldos de extrato pelos botões acima, ou marque “Registrar valor no Financeiro” ao enviar um documento.</div>'}
     <p class="hint">Este controle é um apoio para a direção e a APP. A prestação de contas oficial (PDDE/FNDE e município) segue os sistemas e prazos dos órgãos responsáveis.</p></div>`;
+}
+function cxFinMatch(r, ff) {
+  if (ff.assunto) { const l = cxLinksOf(r); if (ff.assunto === '__sem' ? l.length : !l.includes(ff.assunto)) return false; }
+  const w = cxNorm(ff.q || '').trim().split(/\s+/).filter(Boolean);
+  return !w.length || w.every(t => cxNorm([r.title, r.fin.supplier, r.fin.docNumber, r.fin.category, cxLinkNames(r), r.notes].join(' ')).includes(t));
 }
 window.cxOpenInitial = () => cxOpenUpload({kind: 'lancamento', area: 'financeiro', date: `${cx.finYear}-01-01`, initial: true}) || setTimeout(() => {
   const form = document.getElementById('cxUpForm'); if (!form) return;
@@ -1657,8 +1886,8 @@ window.cxOpenInitial = () => cxOpenUpload({kind: 'lancamento', area: 'financeiro
 window.cxExportCSV = () => {
   const rows = cx.records.filter(r => r.fin && String(r.date).slice(0, 4) === cx.finYear && (!cx.finAccount || r.fin.account === cx.finAccount)).sort((x, y) => String(x.date).localeCompare(String(y.date)));
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = [['Data', 'Conta', 'Movimento', 'Natureza', 'Categoria', 'Descrição', 'Fornecedor/origem', 'Nº documento', 'Processo', 'Valor (R$)', 'Arquivo'].map(q).join(';')]
-    .concat(rows.map(r => [cxBR(r.date), CX_ACCOUNTS[r.fin.account]?.label, CX_MOVES[r.fin.move], CX_NATURES[r.fin.nature] || '', r.fin.category, r.title, r.fin.supplier, r.fin.docNumber, r.processo, ((r.fin.move === 'saida' ? -1 : 1) * r.fin.amount / 100).toFixed(2).replace('.', ','), r.file?.name || ''].map(q).join(';')));
+  const lines = [['Data', 'Conta', 'Movimento', 'Natureza', 'Categoria', 'Descrição', 'Fornecedor/origem', 'Nº documento', 'Assunto', 'Valor (R$)', 'Arquivo'].map(q).join(';')]
+    .concat(rows.map(r => [cxBR(r.date), CX_ACCOUNTS[r.fin.account]?.label, CX_MOVES[r.fin.move], CX_NATURES[r.fin.nature] || '', r.fin.category, r.title, r.fin.supplier, r.fin.docNumber, cxLinkNames(r), ((r.fin.move === 'saida' ? -1 : 1) * r.fin.amount / 100).toFixed(2).replace('.', ','), r.file?.name || ''].map(q).join(';')));
   const blob = new Blob(['﻿' + lines.join('\r\n')], {type: 'text/csv;charset=utf-8'});
   const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `financeiro_${cx.finYear}${cx.finAccount ? '_' + cx.finAccount : ''}.csv`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 2000);
 };

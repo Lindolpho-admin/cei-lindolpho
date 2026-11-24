@@ -86,6 +86,23 @@ try {
   assert.equal(pdde.nat.capital, 420000); assert.equal(pdde.nat.custeio, 310000);
   assert.equal(pdde.recon.bank, 721000); assert.equal(pdde.recon.diff, 9000); assert.deepEqual([...pdde.recon.types].sort(), ['conta_corrente', 'investimentos']);
   assert.equal(fin.accounts.find(x => x.account === 'SICOOB').count, 0);
+  // v66: assuntos (compra, doação…) e ligação dos documentos
+  const as1 = await json('/api/app/arquivo', admin, 'POST', form({kind: 'assunto', area: 'compras', date: '2026-10-01', title: 'Compra de ventiladores', assunto: {tipo: 'compra', account: 'PDDE_Basico', nature: 'capital', category: 'Material permanente / equipamento', supplier: 'Loja ABC'}}), 201);
+  assert.equal(as1.kind, 'assunto'); assert.equal(as1.processo, 'Compra de ventiladores'); assert.equal(as1.assunto.nature, 'capital'); assert.equal(as1.assunto.tipo, 'compra');
+  const as2 = await json('/api/app/arquivo', admin, 'POST', form({kind: 'assunto', area: 'compras', date: '2026-10-01', title: 'Doação de livros', assunto: {tipo: 'inventado', account: 'XYZ', nature: 'banana'}}), 201);
+  assert.equal(as2.assunto.tipo, 'compra'); assert.equal(as2.assunto.account, ''); assert.equal(as2.assunto.nature, '');
+  const ligado = await json('/api/app/arquivo', admin, 'POST', form({kind: 'orcamento', area: 'compras', date: '2026-10-02', title: 'Orçamento ligado', assuntos: [as1.id, 'não-é-id', as2.id], semAssunto: '1'}, '%PDF-1.4 x'), 201);
+  assert.deepEqual(ligado.assuntos, [as1.id, as2.id]); assert.equal(ligado.semAssunto, false);
+  const avulso = await json('/api/app/arquivo', admin, 'POST', form({kind: 'termo', area: 'secretaria', date: '2026-10-03', title: 'Termo de doação avulso', semAssunto: '1'}, '%PDF-1.4 y'), 201);
+  assert.equal(avulso.semAssunto, true); assert.deepEqual(avulso.assuntos, []);
+  const edit = await json('/api/app/documents/' + avulso.id, admin, 'PUT', {central: true, kind: 'termo', area: 'secretaria', date: '2026-10-03', title: 'Termo de doação avulso', assuntos: [as2.id]});
+  assert.deepEqual(edit.assuntos, [as2.id]); assert.equal(edit.semAssunto, false);
+  const ren = await json('/api/app/documents/' + as1.id, admin, 'PUT', {central: true, kind: 'assunto', area: 'compras', date: '2026-10-01', title: 'Ventiladores 2026', assunto: {tipo: 'compra', account: 'PDDE_Basico', nature: 'capital'}});
+  assert.equal(ren.processo, 'Ventiladores 2026'); assert.equal(ren.kind, 'assunto');
+  await json('/api/app/arquivo', admin, 'POST', form({kind: 'assunto', area: 'compras', date: '2026-10-01', title: ''}), 400);
+  await json('/api/app/arquivo', teacher, 'POST', form({kind: 'assunto', area: 'compras', date: '2026-10-01', title: 'x'}), 403);
+  // assunto não vira documento público (não tem arquivo)
+  assert.ok(!(await json('/api/public/materials', null)).some(m => m.id === as1.id));
   // Backup completo inclui os registros do arquivo central e os anexos
   const backup = await json('/api/storage/backup', admin);
   assert.ok(backup.archive.records.some(r => r.id === nf.id && r.fin.amount === 80000));
