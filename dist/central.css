@@ -481,3 +481,8 @@ body.cx-top .cx-g,body.cx-top .cx-t{flex:0 0 auto}
 @media(min-width:981px){.cx-groups{flex-wrap:nowrap}body.cx-top .cx-g{font-size:13px;padding:8px 9px!important}.cx-top-search{flex:0 1 170px}.cx-top-bar{gap:4px}}
 @media(min-width:981px) and (max-width:1240px){.cx-top-search{display:none}}
 @media(min-width:761px) and (max-width:1120px){.cx-g>span[aria-hidden]{display:none}body.cx-top .brand span{display:none}}
+
+/* v63 — Fotos (pedidos) */
+.cx-bh-card.warn{border-left-color:#d9a21b}.cx-bh-card.warn b{color:#8a6100}
+#cxFoItens select,#cxFoItens input,#cxFoEvFaixas input,#cxFoAnx input[type=file]{width:100%;box-sizing:border-box}
+@media (max-width:640px){#cxFoAnx{grid-template-columns:1fr!important}#cxFoItens>div,#cxFoEvFaixas>div{grid-template-columns:1fr 1fr!important}}

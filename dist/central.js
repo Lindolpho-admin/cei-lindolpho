@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '62';
+const CX_VERSION = '63';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -193,7 +193,7 @@ function cxBuildNav() {
   frag.append(dash || make('dashboard', '⌂ Início'));
   frag.append(group('Arquivo e documentos'), make('arquivo', '🗂 Arquivo central', {}), make('atas', '✎ Atas de reunião'), make('arquivo', '🛒 Compras e orçamentos', {area: 'compras'}));
   if (doc) frag.append(doc); frag.append(make('timbrado', '📄 Papel timbrado'));
-  frag.append(group('Financeiro'), make('financeiro', '💰 Saldos e lançamentos'));
+  frag.append(group('Financeiro'), make('financeiro', '💰 Saldos e lançamentos'), make('fotos', '📸 Fotos (pedidos)'));
   frag.append(group('Colegiados'), make('colegiado', '◇ Conselho Escolar', {orgao: 'conselho'}), make('colegiado', '◉ APP', {orgao: 'app'}));
   frag.append(group('Secretaria'), make('equipe', '👥 Equipe da instituição'), make('banco', '⏱ Banco de horas'), make('turmas', '🏫 Turmas do ano'), make('enturmacao', '🎂 Ver enturmação'));
   if (esp) frag.append(esp); if (bib) frag.append(bib); if (solic) frag.append(solic);
@@ -214,7 +214,7 @@ function cxBuildTopNav() {
     ['inicio', 'Início', '⌂', [['Início', find('dashboard')]]],
     ['secretaria', 'Secretaria', '📋', [['Lista de espera', find('espera')], ['Turmas do ano', find('turmas')], ['Ver enturmação', find('enturmacao')], ['Relatórios', find('relatorios')]]],
     ['documentos', 'Documentos', '🗂', [['Arquivo central', find('arquivo', {})], ['Atas de reunião', find('atas')], ['Emitir documentos', find('documentos')], ['Papel timbrado', find('timbrado')]]],
-    ['financas', 'Finanças e colegiados', '💰', [['Saldos e lançamentos', find('financeiro')], ['Compras e orçamentos', find('arquivo', {area: 'compras'})], ['Conselho Escolar', find('colegiado', {orgao: 'conselho'})], ['APP', find('colegiado', {orgao: 'app'})]]],
+    ['financas', 'Finanças e colegiados', '💰', [['Saldos e lançamentos', find('financeiro')], ['Compras e orçamentos', find('arquivo', {area: 'compras'})], ['Conselho Escolar', find('colegiado', {orgao: 'conselho'})], ['APP', find('colegiado', {orgao: 'app'})], ['Fotos (pedidos)', find('fotos')]]],
     ['pessoas', 'Pessoas', '👥', [['Equipe da instituição', find('equipe')], ['Banco de horas', find('banco')]]],
     ['biblioteca', 'Biblioteca', '📚', [['Acervo', find('biblioteca')], ['Pedidos de empréstimo', find('solicitacoes')]]],
     ['sistema', 'Sistema', '⚙', [['Página pública', find('publica')], ['Links úteis', find('links')], ['Equipe, acessos e publicações', find('acessos')], ['Backup e segurança', find('seguranca')]]]
@@ -250,7 +250,7 @@ function cxBuildTopNav() {
     w.append(b, p); return {w, b, p}; };
   const novo = mkPop('cx-top-new', '＋ <span>Novo</span>', 'Criar novo');
   novo.p.classList.add('cx-pop-r');
-  const quick = [['⬆ Enviar documentos', () => cxOpenUpload()], ['✎ Redigir ata', () => cxGo('atas')], ['🧾 Lançar nota fiscal', () => cxOpenUpload({kind: 'nota_fiscal', area: 'financeiro'})], ['✉ Novo ofício', () => newOficio()], ['📄 Novo comunicado', () => cxOpenTimbrado('comunicado')], ['🕒 Declaração de comparecimento', () => cxGoDecl()], ['🎓 Certificado de conclusão', () => { state.view = 'documentos'; render(); setTimeout(() => openDocGen('certificado'), 50); }], ['♙ Nova vaga na lista de espera', () => { state.view = 'espera'; render(); setTimeout(() => openWaitModal(), 50); }]];
+  const quick = [['⬆ Enviar documentos', () => cxOpenUpload()], ['📸 Novo pedido de foto', () => { cxFo.abrirNovo = true; cxGo('fotos'); }], ['✎ Redigir ata', () => cxGo('atas')], ['🧾 Lançar nota fiscal', () => cxOpenUpload({kind: 'nota_fiscal', area: 'financeiro'})], ['✉ Novo ofício', () => newOficio()], ['📄 Novo comunicado', () => cxOpenTimbrado('comunicado')], ['🕒 Declaração de comparecimento', () => cxGoDecl()], ['🎓 Certificado de conclusão', () => { state.view = 'documentos'; render(); setTimeout(() => openDocGen('certificado'), 50); }], ['♙ Nova vaga na lista de espera', () => { state.view = 'espera'; render(); setTimeout(() => openWaitModal(), 50); }]];
   quick.forEach(([t, fn]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.onclick = () => { cxTopClosePops(); document.body.classList.remove('cx-top-open'); fn(); }; novo.p.append(b); });
   const acc = mkPop('cx-top-acc', `<span class="cx-acc-i" aria-hidden="true">${cxEsc((CX_SESSION.email || '?').charAt(0).toUpperCase())}</span><span class="cx-acc-t">Conta</span>`, 'Conta e sessão');
   acc.p.classList.add('cx-pop-r');
@@ -346,6 +346,7 @@ render = function () {
   if (CX_ADMIN && state.view === 'publica') { setHead('publica'); cxMarkActive(); return cxRenderPublic(a); }
   if (CX_ADMIN && state.view === 'turmas') { document.getElementById('title').textContent = 'Turmas do ano'; document.getElementById('subtitle').textContent = 'Quantas turmas o CEI atende em cada ano, por faixa de idade — aparece na página pública'; cxMarkActive(); return cxRenderTurmas(a); }
   if (CX_ADMIN && state.view === 'relatorios') { document.getElementById('title').textContent = 'Relatórios'; document.getElementById('subtitle').textContent = 'Listas prontas para consulta rápida, impressão (com o logotipo do CEI) ou planilha'; cxMarkActive(); return cxRenderRelatorios(a); }
+  if (CX_ADMIN && state.view === 'fotos') { document.getElementById('title').textContent = 'Fotos (pedidos)'; document.getElementById('subtitle').textContent = 'Pedidos dos pais, anexos, pagamento e aviso quando as fotos ficarem prontas'; cxMarkActive(); return cxRenderFotos(a); }
   if (CX_ADMIN && state.view === 'banco') { document.getElementById('title').textContent = 'Banco de horas'; document.getElementById('subtitle').textContent = 'Horas a receber e a repor de cada profissional, com o histórico de pagamentos'; cxMarkActive(); return cxRenderBanco(a); }
   if (CX_ADMIN && state.view === 'links') { document.getElementById('title').textContent = 'Links úteis'; document.getElementById('subtitle').textContent = 'Atalhos com ícone para sites e sistemas — também no Espaço do Professor e na página pública'; cxMarkActive(); return cxRenderLinks(a); }
   if (CX_ADMIN && state.view === 'equipe') { document.getElementById('title').textContent = 'Equipe da instituição'; document.getElementById('subtitle').textContent = 'Gestão, professores, administrativo e apoio — com foto para a página pública'; cxMarkActive(); return cxRenderEquipe(a); }
@@ -2208,4 +2209,304 @@ function cxInit() {
   render();
 }
 if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', () => setTimeout(cxInit, 0)); else setTimeout(cxInit, 0);
+
+/* v63 — Fotos (pedidos): venda de fotos aos pais.
+   Aba em Finanças e colegiados. Só a administração vê. Dados em portal.fotos (eventos + pedidos), valores em centavos.
+   Anexos (print do WhatsApp, comprovante) ficam no R2 em cei/pedidos-fotos/<id>, fora de qualquer endereço público.
+   O preço é calculado aqui só para mostrar; quem grava o valor final é o servidor (server/access.js → cleanPedidoFoto). */
+const cxFo = {dados: null, aba: 'pedidos', f: {q: '', filtro: '', evento: ''}, rasc: null, ev: null, abrirNovo: false, ultimoEvento: '',
+  ultimoTam: (() => { try { return localStorage.getItem('cxFoTam') || '10x15'; } catch { return '10x15'; } })()};
+const CX_FO_TAM = ['10x15', '15x21', '20x25', '20x30'];
+const CX_FO_PAG = {pendente: 'Ainda não pagou', parcial: 'Pago em parte', pago: 'Pago'};
+const CX_FO_SIT = {recebido: 'Pedido recebido', producao: 'Em produção', pronto: 'Pronto — avisar o pai', entregue: 'Entregue'};
+const CX_FO_FORMA = {'': 'Não informada', pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão', outro: 'Outro'};
+const cxFoTam = t => String(t).replace('x', ' × ');
+async function cxFoLoad() { cxFo.dados = await cxRequest('/api/portal/fotos'); return cxFo.dados; }
+const cxFoEventos = () => (cxFo.dados?.eventos || []).slice().sort((a, b) => Number(b.aberto) - Number(a.aberto) || String(b.criadoEm).localeCompare(String(a.criadoEm)));
+const cxFoEvento = id => (cxFo.dados?.eventos || []).find(e => e.id === id);
+const cxFoPedidos = () => (cxFo.dados?.pedidos || []).slice().sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(b.criadoEm).localeCompare(String(a.criadoEm)));
+function cxFoPreco(ev, qtd) { const f = (ev?.faixas || []).find(x => qtd >= x.de && (x.ate == null || qtd <= x.ate)); return f ? f.valor : null; }
+function cxFoFaixasTxt(ev) {
+  return (ev.faixas || []).map(f => `${f.ate == null ? `${f.de} ou mais` : f.de === f.ate ? `${f.de}` : `${f.de} a ${f.ate}`} foto${f.ate === 1 ? '' : 's'}: ${cxMoney(f.valor)} cada`).join(' · ');
+}
+const cxFoItensTxt = o => (o.itens || []).map(i => `${i.qtd} × ${cxFoTam(i.tam)}`).join(' · ');
+const cxFoFalta = o => Math.max(0, (o.total || 0) - (o.recebido || 0));
+function cxFoZapLink(o) {
+  let n = String(o.telefone || '').replace(/\D/g, ''); if (n.length <= 11) n = '55' + n;
+  const nome = String(o.responsavel || '').trim().split(/\s+/)[0] || '', falta = cxFoFalta(o);
+  const msg = `Olá, ${nome}! As fotos de ${o.crianca} já estão prontas para retirada no CEI Lindolpho.${falta > 0 ? ` Falta pagar ${cxMoney(falta)}.` : ''} Qualquer dúvida, é só responder esta mensagem.`;
+  return `https://wa.me/${n}?text=${encodeURIComponent(msg)}`;
+}
+
+/* ---------- Recibo (para assinatura do presidente da APP) ---------- */
+function cxExtenso(cents) {
+  const U = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'catorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'],
+    D = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'],
+    C = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+  const g = n => { if (n === 100) return 'cem'; const c = Math.floor(n / 100), r = n % 100, p = []; if (c) p.push(C[c]); if (r) p.push(r < 20 ? U[r] : D[Math.floor(r / 10)] + (r % 10 ? ' e ' + U[r % 10] : '')); return p.join(' e '); };
+  const reais = Math.floor(cents / 100), cent = cents % 100, partes = [];
+  if (reais) {
+    let t = ''; const mil = Math.floor(reais / 1000), r = reais % 1000;
+    if (mil) t = (mil === 1 ? 'mil' : g(mil) + ' mil') + (r ? (r < 100 || r % 100 === 0 ? ' e ' : ' ') + g(r) : '');
+    else t = g(r);
+    partes.push(t + (reais === 1 ? ' real' : (reais % 1000000 === 0 ? ' de reais' : ' reais')));
+  }
+  if (cent) partes.push(g(cent) + (cent === 1 ? ' centavo' : ' centavos'));
+  return partes.join(' e ') || 'zero real';
+}
+// Nome do presidente da APP na composição vigente (Finanças e colegiados → APP). Se não achar, a linha de assinatura sai sem nome.
+async function cxFoPresidenteApp() {
+  try {
+    const hoje = cxToday(), todas = (await cxLoadColegiados()).app || [];
+    const chapa = todas.find(c => c.inicio <= hoje && hoje <= c.fim) || todas.slice().sort((a, b) => String(b.fim).localeCompare(String(a.fim)))[0];
+    return chapa?.membros.find(m => /presidente/i.test(m.cargo || '') && !/vice/i.test(m.cargo || ''))?.nome || '';
+  } catch { return ''; }
+}
+async function cxFoRecibo(o) {
+  const w = window.open('', '_blank'); if (!w) return notify('Permita a abertura da janela de impressão para este site.');
+  const recebido = o.recebido || 0; if (!recebido) { w.close(); return notify('Este pedido ainda não tem pagamento registrado.'); }
+  const pres = await cxFoPresidenteApp(), falta = cxFoFalta(o), forma = (CX_FO_FORMA[o.forma] && o.forma ? CX_FO_FORMA[o.forma] : 'forma não informada').toLowerCase();
+  const linhas = o.itens.map(i => `<p style="margin:0 0 1.5mm;padding-left:6mm">• ${i.qtd} × fotografia ${cxFoTam(i.tam)} cm — ${cxMoney(o.unitario)} cada = <b>${cxMoney(o.unitario * i.qtd)}</b></p>`).join('');
+  const corpo = `<p style="text-align:justify;line-height:1.55">A Associação de Pais e Professores (APP) do CEI Lindolpho José da Silva declara ter recebido de <b>${cxEsc(o.responsavel)}</b>, responsável por <b>${cxEsc(o.crianca)}</b>${o.turma ? ` (${cxEsc(o.turma)})` : ''}, a quantia de <b>${cxMoney(recebido)}</b> (${cxEsc(cxExtenso(recebido))}), paga em <b>${cxEsc(forma)}</b>, referente à compra de fotografias${o.eventoNome ? ` do evento “${cxEsc(o.eventoNome)}”` : ''}, conforme discriminado a seguir:</p>
+    <p style="margin:0 0 2mm"><b>Itens adquiridos</b></p>${linhas}
+    <p style="margin:3mm 0 0">Total do pedido: <b>${cxMoney(o.total)}</b> (${o.fotos} foto${o.fotos === 1 ? '' : 's'})<br>Valor recebido neste recibo: <b>${cxMoney(recebido)}</b>${falta ? `<br>Saldo a pagar: <b>${cxMoney(falta)}</b>` : ''}</p>
+    <p style="text-align:justify;margin-top:4mm">${falta ? `Pagamento parcial: ainda resta o saldo de ${cxMoney(falta)}.` : 'Pagamento integral do pedido. Damos plena quitação.'}</p>`;
+  cxLetterhead({title: 'RECIBO', bodyHtml: corpo, dateIso: cxToday(), showDate: true, signers: [{name: pres, role: 'Presidente da APP'}, {name: o.responsavel, role: 'Responsável pelo pagamento'}]}, w);
+}
+window.cxFoReciboId = id => { const o = (cxFo.dados?.pedidos || []).find(x => x.id === id); if (o) cxFoRecibo(o); };
+window.cxFoReciboForm = () => {
+  const d = cxFoDados(), ev = cxFoEvento(d.eventoId), fotos = d.itens.reduce((s, i) => s + (i.qtd || 0), 0), un = cxFoPreco(ev, fotos);
+  if (un == null) return;
+  const total = un * fotos, rec = d.pagamento === 'pago' ? total : d.pagamento === 'parcial' && Number.isFinite(d.recebido) ? d.recebido : 0;
+  cxFoRecibo({...d, eventoNome: ev.nome, unitario: un, total, recebido: rec});
+};
+
+/* ---------- Tela principal ---------- */
+async function cxRenderFotos(a) {
+  a.innerHTML = '<div class="panel" style="margin-top:0"><p class="muted">Carregando…</p></div>';
+  try { await cxFoLoad(); } catch (e) { a.innerHTML = `<div class="panel" style="margin-top:0"><div class="cx-empty">${cxEsc(e.message)}</div></div>`; return; }
+  if (state.view !== 'fotos') return;
+  const evs = cxFoEventos(), sem = !evs.length;
+  const tabs = [['pedidos', 'Pedidos'], ['eventos', 'Eventos de venda e preços']];
+  a.innerHTML = `<div id="cxFoTopo"></div>
+    <div class="panel"><div class="cx-head"><div><h2>Fotos — pedidos dos pais</h2><p>Registre quem pediu, o tamanho e a quantidade, o telefone para avisar, o print do WhatsApp e o comprovante de pagamento. O preço de cada foto vem do <b>evento de venda</b>. Só a administração vê esta aba.</p></div>
+      <div class="cx-btns"><button class="cx-btn primary" onclick="cxFoForm('')" ${sem ? 'disabled' : ''}>+ Novo pedido</button></div></div>
+      ${sem ? `<div class="cx-empty">Para começar, crie um <b>evento de venda</b> (por exemplo, “Fotos de fim de ano 2026”) com os preços por quantidade.<div style="margin-top:10px"><button class="cx-btn primary" onclick="cxFoEvForm('')">Criar o primeiro evento</button></div></div>` : `
+      <nav class="cx-subtabs" role="tablist">${tabs.map(([k, t]) => `<button role="tab" aria-selected="${cxFo.aba === k}" class="${cxFo.aba === k ? 'on' : ''}" onclick="cxFoAba('${k}')">${t}</button>`).join('')}</nav>
+      <div id="cxFoCont"></div>`}</div>`;
+  if (!sem) cxFoConteudo();
+  if (cxFo.abrirNovo) { cxFo.abrirNovo = false; if (!sem) cxFoForm(''); else cxFoEvForm(''); }
+}
+window.cxFoAba = k => { cxFo.aba = k; render(); };
+function cxFoConteudo() {
+  const el = document.getElementById('cxFoCont'); if (!el) return;
+  if (cxFo.aba === 'eventos') { el.innerHTML = cxFoEventosHtml(); return; }
+  const f = cxFo.f, evs = cxFoEventos(), todos = cxFoPedidos().filter(o => !f.evento || o.eventoId === f.evento);
+  const falta = todos.reduce((s, o) => s + cxFoFalta(o), 0), recebido = todos.reduce((s, o) => s + (o.recebido || 0), 0), prontos = todos.filter(o => o.situacao === 'pronto').length;
+  const filtros = [['', 'Todos'], ['falta', 'Falta pagar'], ['pronto', 'Pronto para avisar'], ['producao', 'Em produção'], ['entregue', 'Entregues']];
+  const q = f.q.trim().toLowerCase();
+  const lista = todos.filter(o => (!f.filtro || (f.filtro === 'falta' ? cxFoFalta(o) > 0 : o.situacao === f.filtro)) && (!q || `${o.responsavel} ${o.crianca} ${o.turma} ${o.telefone}`.toLowerCase().includes(q)));
+  el.innerHTML = `<div class="cx-bh-cards mini">
+      <div class="cx-bh-card"><small>Pedidos</small><b>${todos.length}</b><span>${todos.reduce((s, o) => s + o.fotos, 0)} foto(s)</span></div>
+      <div class="cx-bh-card ${falta ? 'neg' : ''}"><small>Falta pagar</small><b>${cxMoney(falta)}</b><span>${todos.filter(o => cxFoFalta(o) > 0).length} pedido(s) em aberto</span></div>
+      <div class="cx-bh-card ${prontos ? 'warn' : ''}"><small>Prontos para avisar</small><b>${prontos}</b><span>use o botão do WhatsApp</span></div>
+      <div class="cx-bh-card pos"><small>Já recebido</small><b>${cxMoney(recebido)}</b><span>dos pedidos listados</span></div></div>
+    <div class="cx-bh-filtros" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0">
+      <select aria-label="Evento" onchange="cxFoFiltro('evento',this.value)"><option value="">Todos os eventos</option>${evs.map(e => `<option value="${e.id}" ${f.evento === e.id ? 'selected' : ''}>${cxEsc(e.nome)}</option>`).join('')}</select>
+      ${filtros.map(([k, t]) => `<button class="cx-chip ${f.filtro === k ? 'ok' : ''}" style="padding:7px 12px;font-size:12.5px" onclick="cxFoFiltro('filtro','${k}')">${t}</button>`).join('')}
+      <input type="search" placeholder="Buscar pai, criança ou turma" value="${cxEsc(f.q)}" oninput="cxFoFiltro('q',this.value)" style="flex:1;min-width:200px"></div>
+    ${lista.length ? `<div class="cx-table-wrap"><table class="cx-table"><thead><tr><th>Responsável</th><th>Criança / turma</th><th>Fotos pedidas</th><th>Pagamento</th><th>Situação</th><th>Anexos</th><th></th></tr></thead><tbody>
+      ${lista.map(o => `<tr><td><b>${cxEsc(o.responsavel)}</b><br><span class="muted">${cxEsc(o.telefone)}</span></td>
+        <td>${cxEsc(o.crianca)}${o.turma ? `<br><span class="muted">${cxEsc(o.turma)}</span>` : ''}</td>
+        <td>${cxEsc(cxFoItensTxt(o))}<br><b>${cxMoney(o.total)}</b> <span class="muted">(${o.fotos} × ${cxMoney(o.unitario)})</span></td>
+        <td><span class="cx-chip ${o.pagamento === 'pago' ? 'ok' : o.pagamento === 'parcial' ? 'warn' : 'bad'}">${CX_FO_PAG[o.pagamento]}</span>${cxFoFalta(o) ? `<br><span class="muted">falta ${cxMoney(cxFoFalta(o))}</span>` : ''}</td>
+        <td><span class="cx-chip ${o.situacao === 'entregue' ? 'ok' : o.situacao === 'pronto' ? 'warn' : ''}">${CX_FO_SIT[o.situacao]}</span></td>
+        <td>${(o.anexos || []).length ? `${o.anexos.length} anexo(s)` : '<span class="muted">nenhum</span>'}</td>
+        <td style="white-space:nowrap"><button class="cx-btn small" onclick="cxFoForm('${o.id}')">Abrir</button> ${o.recebido ? `<button class="cx-btn small" onclick="cxFoReciboId('${o.id}')" title="Gerar recibo para assinatura" aria-label="Gerar recibo de ${cxEsc(o.responsavel)}">🧾</button> ` : ''}<button class="cx-btn small" onclick="cxFoZap('${o.id}')" title="Avisar pelo WhatsApp que ficou pronto" aria-label="Avisar ${cxEsc(o.responsavel)} pelo WhatsApp">📲</button></td></tr>`).join('')}
+      </tbody></table></div>` : `<div class="cx-empty">${todos.length ? 'Nenhum pedido com esse filtro.' : 'Ainda não há pedidos. Clique em “+ Novo pedido”.'}</div>`}`;
+}
+window.cxFoFiltro = (k, v) => { cxFo.f[k] = v; if (k === 'q') { clearTimeout(cxFo.t); cxFo.t = setTimeout(() => { cxFoConteudo(); const i = document.querySelector('.cx-bh-filtros input[type=search]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 200); } else cxFoConteudo(); };
+window.cxFoZap = id => { const o = (cxFo.dados?.pedidos || []).find(x => x.id === id); if (o) window.open(cxFoZapLink(o), '_blank', 'noopener'); };
+
+/* ---------- Eventos de venda ---------- */
+function cxFoEventosHtml() {
+  const evs = cxFoEventos();
+  return `<div style="display:flex;justify-content:flex-end;margin:8px 0"><button class="cx-btn primary" onclick="cxFoEvForm('')">+ Criar evento</button></div>
+    ${evs.map(e => { const n = (cxFo.dados.pedidos || []).filter(o => o.eventoId === e.id).length;
+      return `<div class="cx-item" style="padding:12px 0;border-top:1px solid #eef1f5"><div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"><b style="flex:1">${cxEsc(e.nome)}</b><span class="cx-chip ${e.aberto ? 'ok' : ''}">${e.aberto ? 'Evento aberto' : 'Encerrado'}</span><span class="muted">${n} pedido(s)</span>
+        <button class="cx-btn small" onclick="cxFoEvForm('${e.id}')">Editar preços</button><button class="cx-btn small" onclick="cxFoVerPedidos('${e.id}')">Ver pedidos</button></div>
+        <p class="muted" style="margin:6px 0 0">${cxEsc(cxFoFaixasTxt(e))}</p></div>`; }).join('')}
+    <p class="hint">O desconto vale pelo <b>total de fotos do pedido</b>, somando todos os tamanhos. Mudar a tabela não altera pedidos já salvos; só vale para os próximos (ou quando um pedido for editado e salvo de novo).</p>`;
+}
+window.cxFoVerPedidos = id => { cxFo.f.evento = id; cxFo.aba = 'pedidos'; render(); };
+const CX_FO_FAIXAS_PADRAO = [{ate: 2, valor: 1000}, {ate: 9, valor: 750}, {ate: '', valor: 500}];
+function cxFoEvLinhas() {
+  let de = 1; const n = cxFo.ev.faixas.length;
+  return cxFo.ev.faixas.map((x, i) => { const ate = x.ate === '' || x.ate == null ? '' : x.ate, ultimo = i === n - 1,
+    h = `<div class="full" style="display:grid;grid-template-columns:90px 1fr 1fr 44px;gap:10px;align-items:end">
+      <label>A partir de<input value="${de} foto${de === 1 ? '' : 's'}" readonly aria-label="Faixa ${i + 1}: a partir de"></label>
+      <label>Até (fotos)<input type="number" min="${de}" name="ate${i}" value="${cxEsc(ate)}" placeholder="${ultimo ? 'sem limite' : ''}" data-case="off" oninput="cxFoEvLer()"></label>
+      <label>Valor de cada (R$)<input name="valor${i}" inputmode="decimal" value="${cxEsc(cxMoneyInput(x.valor))}" placeholder="0,00" data-case="off"></label>
+      ${n > 1 && ultimo ? `<button type="button" class="cx-btn small" onclick="cxFoEvRemover()" aria-label="Remover última faixa">✕</button>` : '<span></span>'}</div>`;
+    de = ate === '' ? de + 1 : Number(ate) + 1; return h; }).join('');
+}
+function cxFoEvLer() {
+  const f = document.getElementById('cxFoEvF'); if (!f) return;
+  cxFo.ev.nome = f.elements.nome.value; cxFo.ev.aberto = f.elements.aberto.checked;
+  cxFo.ev.faixas = cxFo.ev.faixas.map((x, i) => ({ate: f.elements['ate' + i].value, valor: cxParseMoney(f.elements['valor' + i].value || '0')}));
+}
+window.cxFoEvLer = cxFoEvLer;
+window.cxFoEvRemover = () => { cxFoEvLer(); cxFo.ev.faixas.pop(); cxFo.ev.faixas[cxFo.ev.faixas.length - 1].ate = ''; cxFoEvRedesenhar(); };
+window.cxFoEvAdd = () => { cxFoEvLer(); const fx = cxFo.ev.faixas, ult = fx[fx.length - 1], de = fx.length === 1 && ult.ate === '' ? 1 : null;
+  if (ult.ate === '' || ult.ate == null) { const antes = fx.length > 1 ? Number(fx[fx.length - 2].ate) : 0; ult.ate = antes + 1; }
+  fx.push({ate: '', valor: ult.valor}); cxFoEvRedesenhar(); };
+function cxFoEvRedesenhar() { const box = document.getElementById('cxFoEvFaixas'); if (box) box.innerHTML = cxFoEvLinhas(); }
+window.cxFoEvForm = id => {
+  const e = id ? cxFoEvento(id) : null; if (id && !e) return notify('Evento não encontrado.');
+  cxFo.ev = e ? {id: e.id, nome: e.nome, aberto: e.aberto, faixas: e.faixas.map(x => ({ate: x.ate == null ? '' : x.ate, valor: x.valor}))} : {id: '', nome: '', aberto: true, faixas: CX_FO_FAIXAS_PADRAO.map(x => ({...x}))};
+  const n = e ? (cxFo.dados.pedidos || []).filter(o => o.eventoId === e.id).length : 0;
+  cxModal(`<h2>${e ? 'Editar evento de venda' : 'Novo evento de venda'}</h2>
+    <form class="cx-form cx-static-actions" id="cxFoEvF" onsubmit="event.preventDefault();cxFoEvSalvar()">
+      <label class="full">Nome do evento *<input name="nome" required maxlength="80" value="${cxEsc(cxFo.ev.nome)}" placeholder="Ex.: Fotos de fim de ano 2026"></label>
+      <fieldset class="cx-fieldset"><legend>Preço de cada foto, conforme o total de fotos do pedido</legend><div class="full" id="cxFoEvFaixas" style="display:grid;gap:10px">${cxFoEvLinhas()}</div>
+        <div class="full"><button type="button" class="cx-btn small" onclick="cxFoEvAdd()">+ Adicionar faixa</button></div>
+        <p class="hint full">Deixe o “Até” da última faixa vazio para valer de lá em diante (“sem limite”). Exemplo: 1 a 2 fotos R$ 10,00 · 3 a 9 fotos R$ 7,50 · 10 ou mais R$ 5,00.</p></fieldset>
+      <label class="cx-check full"><input type="checkbox" name="aberto" ${cxFo.ev.aberto ? 'checked' : ''}> Evento aberto (aceita novos pedidos)</label>
+      <p class="hint full">Os tamanhos de foto são os mesmos em qualquer evento: 10 × 15, 15 × 21, 20 × 25 e 20 × 30 cm. O preço é igual para todos os tamanhos.</p>
+      <p class="hint full" id="cxFoEvErr" style="color:#b3261e" hidden></p>
+      <div class="actions full">${e && !n ? `<button type="button" class="cx-btn danger" onclick="cxFoEvExcluir('${e.id}')">Excluir evento</button>` : ''}<button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar evento</button></div></form>`);
+};
+window.cxFoEvSalvar = async () => {
+  cxFoEvLer(); const err = document.getElementById('cxFoEvErr'), fx = cxFo.ev.faixas, mostra = m => { err.textContent = m; err.hidden = false; };
+  let de = 1; const faixas = [];
+  for (let i = 0; i < fx.length; i++) {
+    const ate = fx[i].ate === '' ? null : Number(fx[i].ate);
+    if (ate === null && i < fx.length - 1) return mostra('Só a última faixa pode ficar sem limite.');
+    if (ate !== null && (!Number.isInteger(ate) || ate < de)) return mostra(`Na faixa ${i + 1}, o “Até” deve ser um número maior ou igual a ${de}.`);
+    if (!Number.isFinite(fx[i].valor)) return mostra(`Confira o valor da faixa ${i + 1}.`);
+    faixas.push({de, ate, valor: fx[i].valor}); de = (ate ?? de) + 1;
+  }
+  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({evento: {id: cxFo.ev.id || undefined, nome: cxFo.ev.nome, aberto: cxFo.ev.aberto, faixas}})}); notify('Evento salvo.'); cxCloseModal(); render(); }
+  catch (e) { mostra(e.message); }
+};
+window.cxFoEvExcluir = async id => { if (!confirm('Excluir este evento de venda? Ele não tem pedidos.')) return; try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({excluirEvento: id})}); notify('Evento excluído.'); cxCloseModal(); render(); } catch (e) { notify(e.message); } };
+
+/* ---------- Pedido ---------- */
+const CX_FO_TIPOS_ANEXO = [['whatsapp', 'Print do WhatsApp com o pedido', 'Imagem da conversa em que o pai fez o pedido'], ['comprovante', 'Comprovante de pagamento', 'Imagem ou PDF do Pix (em dinheiro, não precisa)']];
+function cxFoItensHtml() {
+  const ev = cxFoEvento(document.getElementById('cxFoF')?.elements.eventoId.value), fotos = cxFo.rasc.itens.reduce((s, i) => s + (Number(i.qtd) || 0), 0), un = cxFoPreco(ev, fotos);
+  return cxFo.rasc.itens.map((it, i) => `<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 44px;gap:10px;align-items:end">
+    <label>Tamanho da foto<select name="tam${i}" onchange="cxFoLerItens();cxFoResumo()">${CX_FO_TAM.map(t => `<option value="${t}" ${it.tam === t ? 'selected' : ''}>${cxFoTam(t)} cm</option>`).join('')}</select></label>
+    <label>Quantidade<input type="number" min="1" max="200" name="qtd${i}" value="${cxEsc(it.qtd)}" data-case="off" oninput="cxFoLerItens();cxFoResumo()"></label>
+    <label>Valor de cada<input name="un${i}" value="${un == null ? '—' : cxMoney(un)}" readonly aria-label="Valor de cada foto (automático)"></label>
+    <label>Subtotal<input name="sub${i}" value="${un == null ? '—' : cxMoney(un * (Number(it.qtd) || 0))}" readonly aria-label="Subtotal"></label>
+    ${cxFo.rasc.itens.length > 1 ? `<button type="button" class="cx-btn small" onclick="cxFoRemItem(${i})" aria-label="Remover este tamanho">✕</button>` : '<span></span>'}</div>`).join('');
+}
+function cxFoLerItens() { const f = document.getElementById('cxFoF'); if (!f) return; cxFo.rasc.itens = cxFo.rasc.itens.map((_, i) => ({tam: f.elements['tam' + i].value, qtd: f.elements['qtd' + i].value})); }
+window.cxFoLerItens = cxFoLerItens;
+window.cxFoAddItem = () => { cxFoLerItens(); const ult = cxFo.rasc.itens[cxFo.rasc.itens.length - 1]; cxFo.rasc.itens.push({tam: ult?.tam || cxFo.ultimoTam, qtd: 1}); cxFoRedesenhar(); };
+window.cxFoRemItem = i => { cxFoLerItens(); cxFo.rasc.itens.splice(i, 1); cxFoRedesenhar(); };
+function cxFoRedesenhar() { const b = document.getElementById('cxFoItens'); if (b) b.innerHTML = cxFoItensHtml(); cxFoResumo(); }
+window.cxFoRedesenhar = cxFoRedesenhar;
+function cxFoDados() {
+  const f = document.getElementById('cxFoF'), e = f.elements; cxFoLerItens();
+  return {id: f.dataset.id || undefined, eventoId: e.eventoId.value, responsavel: e.responsavel.value.trim(), telefone: e.telefone.value.trim(), crianca: e.crianca.value.trim(), turma: e.turma.value.trim(), data: e.data.value,
+    itens: cxFo.rasc.itens.map(i => ({tam: i.tam, qtd: Number(i.qtd)})), pagamento: e.pagamento.value, recebido: e.pagamento.value === 'parcial' ? cxParseMoney(e.recebido.value) : 0, forma: e.forma.value, situacao: e.situacao.value, anexos: cxFo.rasc.anexos, obs: e.obs.value.trim()};
+}
+function cxFoResumo() {
+  const f = document.getElementById('cxFoF'), el = document.getElementById('cxFoResumo'); if (!f || !el) return;
+  const d = cxFoDados(), ev = cxFoEvento(d.eventoId), fotos = d.itens.reduce((s, i) => s + (i.qtd || 0), 0), un = cxFoPreco(ev, fotos), total = un == null ? null : un * fotos;
+  document.getElementById('cxFoRecebidoBox').hidden = d.pagamento !== 'parcial';
+  const din = document.getElementById('cxFoDinheiro'); if (din) din.hidden = !(f.elements.forma.value === 'dinheiro' && d.pagamento !== 'pendente');
+  const rec = d.pagamento === 'pago' ? total : d.pagamento === 'parcial' ? (Number.isFinite(d.recebido) ? d.recebido : 0) : 0;
+  el.innerHTML = total == null ? `<span style="color:#b3261e">O evento não tem preço para ${fotos} foto(s). Ajuste as faixas em “Eventos de venda e preços”.</span>` :
+    `<span><b>${fotos}</b> foto(s) × ${cxMoney(un)} = <b>${cxMoney(total)}</b></span><span>Recebido: <b>${cxMoney(rec || 0)}</b> · Falta pagar: <b>${cxMoney(Math.max(0, total - (rec || 0)))}</b></span>`;
+  // Só atualiza os valores na tela (sem recriar os campos, para não tirar o cursor de quem está digitando).
+  d.itens.forEach((it, i) => { const u = f.elements['un' + i], sb = f.elements['sub' + i]; if (u) u.value = un == null ? '—' : cxMoney(un); if (sb) sb.value = un == null ? '—' : cxMoney(un * (it.qtd || 0)); });
+}
+window.cxFoResumo = cxFoResumo;
+function cxFoAnexosHtml() {
+  return CX_FO_TIPOS_ANEXO.map(([tipo, titulo, dica]) => { const lista = cxFo.rasc.anexos.filter(a => a.tipo === tipo);
+    return `<div class="cx-fieldset" style="display:grid;gap:8px;grid-template-columns:1fr;align-content:start"><b>${titulo}</b><span class="muted">${dica}</span>
+      <input type="file" accept="image/*,application/pdf" multiple onchange="cxFoAnexar('${tipo}',this)" aria-label="${titulo}">
+      ${lista.map(a => `<div style="display:flex;gap:8px;align-items:center"><a href="/api/portal/anexo-pedido/${a.id}" target="_blank" rel="noopener" style="flex:1;overflow-wrap:anywhere">${cxEsc(a.nome)}</a><button type="button" class="cx-btn small" onclick="cxFoRemAnexo('${a.id}')" aria-label="Remover ${cxEsc(a.nome)}">✕</button></div>`).join('') || '<span class="muted">Nenhum arquivo ainda</span>'}</div>`; }).join('');
+}
+// Reduz fotos grandes de celular (JPEG de até 1600 px) para o anexo ficar leve; PDF segue como está.
+async function cxFoReduzir(file) {
+  if (file.type === 'application/pdf') { if (file.size > 1500 * 1024) throw new Error(`${file.name}: PDF acima de 1,5 MB.`); return {blob: file, nome: file.name}; }
+  if (!/^image\//.test(file.type)) throw new Error(`${file.name}: envie imagem ou PDF.`);
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error(`${file.name}: não consegui abrir a imagem.`)); i.src = url; });
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    let blob = null; for (const q of [0.82, 0.68, 0.5]) { blob = await new Promise(r => c.toBlob(r, 'image/jpeg', q)); if (blob && blob.size <= 1400 * 1024) break; }
+    if (!blob || blob.size > 1500 * 1024) throw new Error(`${file.name}: imagem grande demais.`);
+    return {blob, nome: file.name.replace(/\.[^.]+$/, '') + '.jpg'};
+  } finally { URL.revokeObjectURL(url); }
+}
+window.cxFoAnexar = async (tipo, input) => {
+  const arquivos = [...input.files]; input.value = ''; const err = document.getElementById('cxFoErr');
+  for (const file of arquivos) {
+    if (cxFo.rasc.anexos.length >= 6) { err.textContent = 'Máximo de 6 anexos por pedido.'; err.hidden = false; break; }
+    try {
+      err.hidden = true; const {blob, nome} = await cxFoReduzir(file);
+      const r = await cxRequest('/api/portal/anexo-pedido', {method: 'POST', headers: {'Content-Type': blob.type}, body: blob});
+      cxFo.rasc.anexos.push({id: r.id, nome, tipo}); document.getElementById('cxFoAnx').innerHTML = cxFoAnexosHtml();
+    } catch (e) { err.textContent = e.message; err.hidden = false; }
+  }
+};
+window.cxFoRemAnexo = id => { cxFo.rasc.anexos = cxFo.rasc.anexos.filter(a => a.id !== id); document.getElementById('cxFoAnx').innerHTML = cxFoAnexosHtml(); };
+window.cxFoForm = id => {
+  const o = id ? (cxFo.dados?.pedidos || []).find(x => x.id === id) : null; if (id && !o) return notify('Pedido não encontrado.');
+  const abertos = cxFoEventos().filter(e => e.aberto || e.id === o?.eventoId);
+  if (!abertos.length) { notify('Não há evento aberto. Abra ou crie um evento de venda.'); return; }
+  const evSel = o?.eventoId || (abertos.some(e => e.id === cxFo.ultimoEvento) ? cxFo.ultimoEvento : abertos[0].id);
+  cxFo.rasc = {itens: o ? o.itens.map(i => ({tam: i.tam, qtd: i.qtd})) : [{tam: cxFo.ultimoTam, qtd: 1}], anexos: o ? o.anexos.map(a => ({...a})) : []};
+  const v = o || {responsavel: '', telefone: '', crianca: '', turma: '', data: cxToday(), pagamento: 'pendente', recebido: 0, forma: 'pix', situacao: 'recebido', obs: ''};
+  cxModal(`<h2>${o ? 'Pedido de foto' : 'Novo pedido de foto'}</h2>
+    <form class="cx-form cx-static-actions" id="cxFoF" data-id="${o?.id || ''}" onsubmit="event.preventDefault();cxFoSalvar()" oninput="cxFoResumo()" onchange="cxFoResumo()">
+      <fieldset class="cx-fieldset"><legend>1. Quem pediu</legend>
+        <label>Nome do pai / responsável *<input name="responsavel" required maxlength="100" value="${cxEsc(v.responsavel)}"></label>
+        <label>Telefone para avisar (WhatsApp) *<input name="telefone" required maxlength="30" inputmode="tel" data-case="off" placeholder="(47) 9 0000-0000" value="${cxEsc(v.telefone)}"></label>
+        <label>Nome da criança *<input name="crianca" required maxlength="100" value="${cxEsc(v.crianca)}"></label>
+        <label>Turma<input name="turma" maxlength="60" value="${cxEsc(v.turma)}" placeholder="Ex.: Maternal II"></label>
+        <label>Evento de venda *<select name="eventoId" onchange="cxFoRedesenhar()">${abertos.map(e => `<option value="${e.id}" ${e.id === evSel ? 'selected' : ''}>${cxEsc(e.nome)}</option>`).join('')}</select></label>
+        <label>Data do pedido<input type="date" name="data" value="${cxEsc(v.data)}"></label></fieldset>
+      <fieldset class="cx-fieldset" style="grid-template-columns:1fr"><legend>2. O que foi pedido</legend><div id="cxFoItens" style="display:grid;gap:10px">${'' /* preenchido abaixo */}</div>
+        <div><button type="button" class="cx-btn small" onclick="cxFoAddItem()">+ Adicionar outro tamanho</button></div>
+        <p class="hint">O valor de cada foto vem do evento e muda sozinho conforme o total de fotos do pedido. O último tamanho usado já vem marcado no próximo pedido.</p></fieldset>
+      <fieldset class="cx-fieldset"><legend>3. Anexos</legend><div id="cxFoAnx" class="full" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${cxFoAnexosHtml()}</div>
+        <p class="hint full" id="cxFoDinheiro" hidden><b>Pagamento em dinheiro:</b> não precisa de comprovante. Use “Gerar recibo” para o presidente da APP assinar.</p>
+        <p class="hint full">Fotos grandes são reduzidas antes de guardar. Os anexos ficam só na área restrita (máximo de 6 por pedido).</p></fieldset>
+      <fieldset class="cx-fieldset"><legend>4. Pagamento e andamento</legend>
+        <label>Pagamento<select name="pagamento">${Object.entries(CX_FO_PAG).map(([k, t]) => `<option value="${k}" ${v.pagamento === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label id="cxFoRecebidoBox" ${v.pagamento === 'parcial' ? '' : 'hidden'}>Valor recebido até agora (R$)<input name="recebido" inputmode="decimal" data-case="off" placeholder="0,00" value="${cxEsc(v.pagamento === 'parcial' ? cxMoneyInput(v.recebido) : '')}"></label>
+        <label>Forma de pagamento<select name="forma">${Object.entries(CX_FO_FORMA).map(([k, t]) => `<option value="${k}" ${v.forma === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label>Situação do pedido<select name="situacao">${Object.entries(CX_FO_SIT).map(([k, t]) => `<option value="${k}" ${v.situacao === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label class="full">Observações<input name="obs" maxlength="300" value="${cxEsc(v.obs)}" placeholder="Ex.: retirar na secretaria na sexta"></label></fieldset>
+      <div class="full cx-bh-prev" id="cxFoResumo" aria-live="polite"></div>
+      <p class="hint full" id="cxFoErr" style="color:#b3261e" hidden></p>
+      <div class="actions full">${o ? `<button type="button" class="cx-btn danger" onclick="cxFoExcluir('${o.id}')">Excluir pedido</button>` : ''}<button type="button" onclick="cxFoReciboForm()">🧾 Gerar recibo</button><button type="button" onclick="cxFoZapForm()">📲 Avisar pelo WhatsApp</button><button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar pedido</button></div></form>`);
+  document.getElementById('cxFoItens').innerHTML = cxFoItensHtml(); cxFoResumo();
+};
+window.cxFoZapForm = () => {
+  const d = cxFoDados(), ev = cxFoEvento(d.eventoId), fotos = d.itens.reduce((s, i) => s + (i.qtd || 0), 0), un = cxFoPreco(ev, fotos), total = un == null ? 0 : un * fotos;
+  if (!d.telefone.replace(/\D/g, '').length || !d.crianca) { const e = document.getElementById('cxFoErr'); e.textContent = 'Preencha o telefone e o nome da criança para avisar.'; e.hidden = false; return; }
+  const rec = d.pagamento === 'pago' ? total : d.pagamento === 'parcial' ? (d.recebido || 0) : 0;
+  window.open(cxFoZapLink({...d, total, recebido: rec}), '_blank', 'noopener');
+};
+window.cxFoSalvar = async () => {
+  const err = document.getElementById('cxFoErr'), d = cxFoDados(); err.hidden = true;
+  try {
+    await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({pedido: d})});
+    cxFo.ultimoEvento = d.eventoId; cxFo.ultimoTam = d.itens[d.itens.length - 1]?.tam || cxFo.ultimoTam;
+    try { localStorage.setItem('cxFoTam', cxFo.ultimoTam); } catch {}
+    notify(d.id ? 'Pedido atualizado.' : 'Pedido salvo.'); cxCloseModal(); render();
+  } catch (e) { err.textContent = e.message; err.hidden = false; }
+};
+window.cxFoExcluir = async id => {
+  const o = (cxFo.dados?.pedidos || []).find(x => x.id === id); if (!o || !confirm(`Excluir o pedido de ${o.responsavel} (${o.crianca})? Os anexos também serão apagados.`)) return;
+  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({id, delete: true})}); notify('Pedido excluído.'); cxCloseModal(); render(); } catch (e) { notify(e.message); }
+};
 })();

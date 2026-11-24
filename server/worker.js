@@ -405,6 +405,21 @@ export default {
         if(!mime||bytes.length>600*1024)return fail('Envie uma foto JPG ou PNG de até 600 KB.',400);
         const id=crypto.randomUUID();await bucket.put('cei/fotos/'+id,bytes,{httpMetadata:{contentType:mime}});return Response.json({id},{headers:{'Cache-Control':'no-store'}});
       }
+      // v63: anexos dos pedidos de fotos (print do WhatsApp, comprovante). Só a administração envia e lê; ficam fora do alcance da página pública.
+      if(url.pathname==='/api/portal/anexo-pedido'&&request.method==='POST'){
+        if(user.role!=='admin')return fail('Operação exclusiva da administração.',403);
+        if(Number(request.headers.get('Content-Length')||0)>1500*1024)return fail('Arquivo acima de 1,5 MB.',413);
+        const bytes=new Uint8Array(await request.arrayBuffer());
+        const mime=bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff?'image/jpeg':bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4e&&bytes[3]===0x47?'image/png':bytes[0]===0x25&&bytes[1]===0x50&&bytes[2]===0x44&&bytes[3]===0x46?'application/pdf':'';
+        if(!mime||bytes.length>1500*1024)return fail('Envie uma imagem (JPG ou PNG) ou um PDF de até 1,5 MB.',400);
+        const id=crypto.randomUUID();await bucket.put('cei/pedidos-fotos/'+id,bytes,{httpMetadata:{contentType:mime}});return Response.json({id,mime},{headers:{'Cache-Control':'no-store'}});
+      }
+      const ap=url.pathname.match(/^\/api\/portal\/anexo-pedido\/([a-f0-9-]{36})$/);
+      if(ap&&request.method==='GET'){
+        if(user.role!=='admin')return fail('Anexo não disponível.',404);
+        const obj=await bucket.get('cei/pedidos-fotos/'+ap[1]);if(!obj)return fail('Anexo não encontrado.',404);
+        return new Response(obj.body,{headers:{'Content-Type':obj.httpMetadata?.contentType||'application/octet-stream','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Disposition':'inline'}});
+      }
       const fo=url.pathname.match(/^\/api\/(portal|public)\/foto\/([a-f0-9-]{36})$/);
       if(fo&&request.method==='GET'){
         const allowed=fo[1]==='portal'?user.role==='admin':fotosPublicas(user.data.portal||{}).has(fo[2]);

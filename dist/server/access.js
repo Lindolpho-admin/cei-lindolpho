@@ -93,6 +93,40 @@ function cleanRegistroBanco(r,old,p,user){
  return {...out,minutos:min,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
 }
 function bancoHoras(p){const b=p.bancoHoras&&typeof p.bancoHoras==='object'?p.bancoHoras:{};return {escalas:b.escalas&&typeof b.escalas==='object'?b.escalas:{},registros:Array.isArray(b.registros)?b.registros:[]}}
+// v63: venda de fotos (aba Fotos). Eventos com preço por faixa de quantidade e pedidos dos pais. Valores em centavos.
+// Dados de crianças e telefones: só a administração (nunca na página pública nem no espaço do professor).
+const TAM_FOTO=['10x15','15x21','20x25','20x30'],PAG_FOTO=['pendente','parcial','pago'],SIT_FOTO=['recebido','producao','pronto','entregue'],FORMA_FOTO=['pix','dinheiro','cartao','outro'],TIPO_ANEXO=['whatsapp','comprovante','outro'];
+const UUID_RE=/^[a-f0-9-]{36}$/;
+function fotosPed(p){const f=p.fotos&&typeof p.fotos==='object'?p.fotos:{};return {eventos:Array.isArray(f.eventos)?f.eventos:[],pedidos:Array.isArray(f.pedidos)?f.pedidos:[]}}
+export function anexosFotos(p){const s=new Set();for(const o of fotosPed(p).pedidos)for(const a of o.anexos||[])s.add(a.id);return s}
+const inteiro=(v,min,max,msg)=>{const n=Number(v);if(v===''||v==null||!Number.isInteger(n)||n<min||n>max)deny(msg,400);return n};
+export function precoFoto(ev,qtd){const f=(ev.faixas||[]).find(x=>qtd>=x.de&&(x.ate==null||qtd<=x.ate));return f?f.valor:null}
+export function cleanEventoFoto(i,old,user){
+ const nome=clip(i.nome,80);if(!nome)deny('Dê um nome ao evento.',400);
+ const fx=Array.isArray(i.faixas)?i.faixas:[];if(!fx.length||fx.length>8)deny('Informe de 1 a 8 faixas de preço.',400);
+ const faixas=fx.map(f=>({de:inteiro(f.de,1,9999,'Faixa de fotos inválida.'),ate:f.ate==null||f.ate===''?null:inteiro(f.ate,1,9999,'Faixa de fotos inválida.'),valor:inteiro(f.valor,0,999999,'Valor da foto inválido.')})).sort((a,b)=>a.de-b.de);
+ faixas.forEach(f=>{if(f.ate!==null&&f.ate<f.de)deny('Em uma faixa, o "até" não pode ser menor que o "a partir de".',400)});
+ if(faixas[0].de!==1)deny('A primeira faixa deve começar em 1 foto.',400);
+ faixas.forEach((f,k)=>{if(k&&(faixas[k-1].ate==null||f.de!==faixas[k-1].ate+1))deny('As faixas devem ser seguidas, sem buraco nem sobreposição (ex.: 1 a 2, 3 a 9, 10 em diante).',400)});
+ return {id:old?.id||crypto.randomUUID(),nome,aberto:i.aberto!==false,faixas,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
+}
+export function cleanPedidoFoto(i,old,p,user){
+ const ev=fotosPed(p).eventos.find(e=>e.id===i.eventoId);if(!ev)deny('Escolha o evento de venda.',400);
+ if(!ev.aberto&&!old)deny('Este evento está encerrado. Reabra o evento para lançar novos pedidos.',400);
+ const responsavel=clip(i.responsavel,100),crianca=clip(i.crianca,100),telefone=clip(i.telefone,30);
+ if(!responsavel)deny('Informe o nome do pai ou responsável.',400);if(!crianca)deny('Informe o nome da criança.',400);
+ if(telefone.replace(/\D/g,'').length<10)deny('Informe o telefone com DDD.',400);
+ if(i.data&&!/^\d{4}-\d{2}-\d{2}$/.test(i.data))deny('Data do pedido inválida.',400);
+ const its=Array.isArray(i.itens)?i.itens:[];if(!its.length||its.length>8)deny('Informe ao menos um tamanho de foto.',400);
+ const itens=its.map(x=>{if(!TAM_FOTO.includes(x.tam))deny('Tamanho de foto inválido. Use 10x15, 15x21, 20x25 ou 20x30.',400);return {tam:x.tam,qtd:inteiro(x.qtd,1,200,'Quantidade de fotos inválida (de 1 a 200).')}});
+ const fotos=itens.reduce((s,x)=>s+x.qtd,0),unitario=precoFoto(ev,fotos);
+ if(unitario==null)deny('O evento não tem preço para '+fotos+' fotos. Ajuste as faixas do evento.',400);
+ const total=fotos*unitario,pagamento=PAG_FOTO.includes(i.pagamento)?i.pagamento:'pendente';
+ let recebido=0;if(pagamento==='pago')recebido=total;else if(pagamento==='parcial'){recebido=inteiro(i.recebido,1,total,'Pagamento em parte: informe um valor maior que zero e menor que o total.');if(recebido>=total)deny('Pagamento em parte: o valor deve ser menor que o total. Se já pagou tudo, marque "Pago".',400)}
+ const an=Array.isArray(i.anexos)?i.anexos:[];if(an.length>6)deny('Máximo de 6 anexos por pedido.',400);
+ const anexos=an.map(a=>{if(!UUID_RE.test(a.id||''))deny('Anexo inválido.',400);return {id:a.id,nome:clip(a.nome,80)||'anexo',tipo:TIPO_ANEXO.includes(a.tipo)?a.tipo:'outro'}});
+ return {id:old?.id||crypto.randomUUID(),eventoId:ev.id,eventoNome:ev.nome,responsavel,telefone,crianca,turma:clip(i.turma,60),data:i.data||old?.data||todayBR(),itens,fotos,unitario,total,pagamento,recebido,forma:FORMA_FOTO.includes(i.forma)?i.forma:'',situacao:SIT_FOTO.includes(i.situacao)?i.situacao:'recebido',anexos,obs:clip(i.obs,300),criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
+}
 // v60: links úteis. A área restrita vê todos; o espaço do professor e a página pública veem só os marcados para eles.
 const CORES_LINK=['azul','verde','laranja','vermelho','roxo','turquesa','rosa','cinza'];
 export function linkUrl(v){
@@ -193,10 +227,11 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   if(path==='/api/portal/transparencia'){if(user.role!=='admin')deny();return {...(p.transparencia||{contas:[],detalhar:true}),rotulos:CONTAS_PUB};}
   if(path==='/api/portal/links')return linksPara(p,user.role);
   if(path==='/api/portal/banco-horas'){if(user.role!=='admin')deny();return bancoHoras(p);}
+  if(path==='/api/portal/fotos'){if(user.role!=='admin')deny();return fotosPed(p);}
   if(path==='/api/portal/requests')return p.requests.filter(r=>user.role==='admin'||r.email===user.email);
   deny('Não encontrado.',404);
  }
- const input=await request.json(),fotosAntes=fotosReferenciadas(p);
+ const input=await request.json(),fotosAntes=fotosReferenciadas(p),anexosAntes=anexosFotos(p);
  if(path==='/api/portal/members'){
   if(user.role!=='admin')deny();const email=String(input.email||'').trim().toLowerCase();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!['admin','teacher','pending'].includes(input.role))deny('Informe e-mail e perfil válidos.',400);
@@ -242,6 +277,18 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   else{const old=b.registros.find(r=>r.id===input.registro?.id);if(input.registro?.id&&!old)deny('Registro não encontrado. Recarregue a página.',404);
    const reg=cleanRegistroBanco(input.registro||{},old,p,user);b.registros=b.registros.filter(r=>r.id!==reg.id);b.registros.push(reg)}
   if(b.registros.length>20000)deny('Limite de registros do banco de horas atingido.',400);
+ }else if(path==='/api/portal/fotos'){
+  if(user.role!=='admin')deny();const f=p.fotos=fotosPed(p);
+  if(input.excluirEvento){if(f.pedidos.some(o=>o.eventoId===input.excluirEvento))deny('Há pedidos neste evento. Encerre o evento em vez de excluir.',400);f.eventos=f.eventos.filter(e=>e.id!==input.excluirEvento)}
+  else if(input.evento){const old=f.eventos.find(e=>e.id===input.evento.id);if(input.evento.id&&!old)deny('Evento não encontrado. Recarregue a página.',404);
+   const ev=cleanEventoFoto(input.evento,old,user);f.eventos=f.eventos.filter(e=>e.id!==ev.id);f.eventos.push(ev);
+   for(const o of f.pedidos)if(o.eventoId===ev.id)o.eventoNome=ev.nome}
+  else if(input.delete===true)f.pedidos=f.pedidos.filter(o=>o.id!==input.id);
+  else{const old=f.pedidos.find(o=>o.id===input.pedido?.id);if(input.pedido?.id&&!old)deny('Pedido não encontrado. Recarregue a página.',404);
+   const ped=cleanPedidoFoto(input.pedido||{},old,p,user),antes=new Set((old?.anexos||[]).map(a=>a.id));
+   for(const a of ped.anexos)if(!antes.has(a.id)&&!await bucket.get('cei/pedidos-fotos/'+a.id))deny('Um anexo não foi enviado. Anexe o arquivo de novo.',400);
+   f.pedidos=f.pedidos.filter(o=>o.id!==ped.id);f.pedidos.push(ped)}
+  if(f.pedidos.length>5000)deny('Limite de 5000 pedidos atingido. Exclua pedidos antigos.',400);if(f.eventos.length>100)deny('Limite de 100 eventos atingido.',400);
  }else if(path==='/api/portal/links'){
   if(user.role!=='admin')deny();p.links=Array.isArray(p.links)?p.links:[];
   if(input.delete===true)p.links=p.links.filter(l=>l.id!==input.id);
@@ -288,5 +335,6 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
  data.portal=p;data.savedAt=new Date().toISOString();await bucket.put(KEY,JSON.stringify(data));
  // Fotos que deixaram de ser usadas são apagadas (só as que estavam em uso antes desta gravação).
  const depois=fotosReferenciadas(p);for(const id of fotosAntes)if(!depois.has(id))await bucket.delete('cei/fotos/'+id);
+ const anexosDepois=anexosFotos(p);for(const id of anexosAntes)if(!anexosDepois.has(id))await bucket.delete('cei/pedidos-fotos/'+id);
  return {ok:true};
 }
