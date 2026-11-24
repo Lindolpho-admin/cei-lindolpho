@@ -120,14 +120,23 @@ function fotosPed(p){const f=p.fotos&&typeof p.fotos==='object'?p.fotos:{};retur
 export function anexosFotos(p){const s=new Set();for(const o of fotosPed(p).pedidos)for(const a of o.anexos||[])s.add(a.id);return s}
 const inteiro=(v,min,max,msg)=>{const n=Number(v);if(v===''||v==null||!Number.isInteger(n)||n<min||n>max)deny(msg,400);return n};
 export function precoFoto(ev,qtd){const f=(ev.faixas||[]).find(x=>qtd>=x.de&&(x.ate==null||qtd<=x.ate));return f?f.valor:null}
-export function cleanEventoFoto(i,old,user){
- const nome=clip(i.nome,80);if(!nome)deny('Dê um nome ao evento.',400);
- const fx=Array.isArray(i.faixas)?i.faixas:[];if(!fx.length||fx.length>8)deny('Informe de 1 a 8 faixas de preço.',400);
+// v65: cada tamanho tem a sua tabela de faixas (ev.tabelas[tam]). Eventos antigos (só ev.faixas) seguem como eram: mesmo preço para todos os tamanhos, faixa pelo total do pedido.
+export function precoFotoTam(ev,tam,qtd){return ev.tabelas?precoFoto({faixas:ev.tabelas[tam]||[]},qtd):precoFoto(ev,qtd)}
+function faixasFoto(fx){
+ if(!Array.isArray(fx)||!fx.length||fx.length>8)deny('Informe de 1 a 8 faixas de preço.',400);
  const faixas=fx.map(f=>({de:inteiro(f.de,1,9999,'Faixa de fotos inválida.'),ate:f.ate==null||f.ate===''?null:inteiro(f.ate,1,9999,'Faixa de fotos inválida.'),valor:inteiro(f.valor,0,999999,'Valor da foto inválido.')})).sort((a,b)=>a.de-b.de);
  faixas.forEach(f=>{if(f.ate!==null&&f.ate<f.de)deny('Em uma faixa, o "até" não pode ser menor que o "a partir de".',400)});
  if(faixas[0].de!==1)deny('A primeira faixa deve começar em 1 foto.',400);
- faixas.forEach((f,k)=>{if(k&&(faixas[k-1].ate==null||f.de!==faixas[k-1].ate+1))deny('As faixas devem ser seguidas, sem buraco nem sobreposição (ex.: 1 a 2, 3 a 9, 10 em diante).',400)});
- return {id:old?.id||crypto.randomUUID(),nome,aberto:i.aberto!==false,faixas,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
+ faixas.forEach((f,k)=>{if(k&&(faixas[k-1].ate==null||f.de!==faixas[k-1].ate+1))deny('As faixas devem ser seguidas, sem buraco nem sobreposição (ex.: 1 a 4, 5 em diante).',400)});
+ return faixas;
+}
+export function cleanEventoFoto(i,old,user){
+ const nome=clip(i.nome,80);if(!nome)deny('Dê um nome ao evento.',400);
+ const preco={};
+ if(i.tabelas&&typeof i.tabelas==='object'){const t={};for(const tam of TAM_FOTO)if(Array.isArray(i.tabelas[tam])&&i.tabelas[tam].length)t[tam]=faixasFoto(i.tabelas[tam]);
+  if(!Object.keys(t).length)deny('Informe o preço de pelo menos um tamanho de foto.',400);preco.tabelas=t}
+ else preco.faixas=faixasFoto(i.faixas);
+ return {id:old?.id||crypto.randomUUID(),nome,aberto:i.aberto!==false,...preco,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
 }
 export function cleanPedidoFoto(i,old,p,user){
  const ev=fotosPed(p).eventos.find(e=>e.id===i.eventoId);if(!ev)deny('Escolha o evento de venda.',400);
@@ -138,9 +147,15 @@ export function cleanPedidoFoto(i,old,p,user){
  if(i.data&&!/^\d{4}-\d{2}-\d{2}$/.test(i.data))deny('Data do pedido inválida.',400);
  const its=Array.isArray(i.itens)?i.itens:[];if(!its.length||its.length>8)deny('Informe ao menos um tamanho de foto.',400);
  const itens=its.map(x=>{if(!TAM_FOTO.includes(x.tam))deny('Tamanho de foto inválido. Use 10x15, 15x21, 20x25 ou 20x30.',400);return {tam:x.tam,qtd:inteiro(x.qtd,1,200,'Quantidade de fotos inválida (de 1 a 200).')}});
- const fotos=itens.reduce((s,x)=>s+x.qtd,0),unitario=precoFoto(ev,fotos);
- if(unitario==null)deny('O evento não tem preço para '+fotos+' fotos. Ajuste as faixas do evento.',400);
- const total=fotos*unitario,pagamento=PAG_FOTO.includes(i.pagamento)?i.pagamento:'pendente';
+ const fotos=itens.reduce((s,x)=>s+x.qtd,0);let unitario,total;
+ if(ev.tabelas){ // v65: preço por tamanho; a faixa vale pela quantidade de cada tamanho
+  const qt={};for(const x of itens)qt[x.tam]=(qt[x.tam]||0)+x.qtd;const un={};total=0;
+  for(const [tam,q] of Object.entries(qt)){const nomeTam=tam.replace('x',' × ')+' cm';
+   if(!ev.tabelas[tam])deny('Este evento não vende fotos '+nomeTam+'. Ajuste os preços do evento.',400);
+   const u=precoFoto({faixas:ev.tabelas[tam]},q);if(u==null)deny('O evento não tem preço para '+q+' foto(s) '+nomeTam+'. Ajuste as faixas do evento.',400);un[tam]=u;total+=q*u}
+  itens.forEach(x=>{x.unitario=un[x.tam]});const us=new Set(Object.values(un));unitario=us.size===1?[...us][0]:null;
+ }else{unitario=precoFoto(ev,fotos);if(unitario==null)deny('O evento não tem preço para '+fotos+' fotos. Ajuste as faixas do evento.',400);total=fotos*unitario}
+ const pagamento=PAG_FOTO.includes(i.pagamento)?i.pagamento:'pendente';
  let recebido=0;if(pagamento==='pago')recebido=total;else if(pagamento==='parcial'){recebido=inteiro(i.recebido,1,total,'Pagamento em parte: informe um valor maior que zero e menor que o total.');if(recebido>=total)deny('Pagamento em parte: o valor deve ser menor que o total. Se já pagou tudo, marque "Pago".',400)}
  const an=Array.isArray(i.anexos)?i.anexos:[];if(an.length>6)deny('Máximo de 6 anexos por pedido.',400);
  const anexos=an.map(a=>{if(!UUID_RE.test(a.id||''))deny('Anexo inválido.',400);return {id:a.id,nome:clip(a.nome,80)||'anexo',tipo:TIPO_ANEXO.includes(a.tipo)?a.tipo:'outro'}});

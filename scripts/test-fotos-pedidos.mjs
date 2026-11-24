@@ -1,10 +1,10 @@
-// v63: aba Fotos (pedidos): eventos com preço por faixa, pedidos, pagamento, anexos privados e acesso só da administração.
+// v63 + v65: aba Fotos (pedidos): eventos com preço por faixa, pedidos, pagamento, anexos privados e acesso só da administração.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import worker from '../dist/server/index.js';
-import {precoFoto} from '../dist/server/access.js';
+import {precoFoto, precoFotoTam} from '../dist/server/access.js';
 import {DiskBucket} from './disk-bucket.mjs';
 
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cei-fotos-'));
@@ -75,6 +75,30 @@ await json('/api/portal/fotos', admin, 'POST', {evento: {nome: 'Outro', faixas}}
 const ev2 = (await json('/api/portal/fotos', admin)).eventos[0]; await ped({...base, eventoId: ev2.id, anexos: []});
 const pub = JSON.stringify(await json('/api/public/home')); assert.ok(!pub.includes('João Souza') && !pub.includes('9999-0001') && !pub.includes('Maria Souza'));
 const prof = JSON.stringify(await json('/api/data/state', teacher)); assert.ok(!prof.includes('João Souza') && !prof.includes('9999-0001') && !prof.includes('pedidos-fotos'));
+
+// v65: preço por tamanho (cada tamanho tem a sua tabela; a faixa vale pela quantidade daquele tamanho).
+const legado = d2 => d2.pedidos.find(o => o.eventoId === ev2.id);
+d = await json('/api/portal/fotos', admin); assert.equal(legado(d).total, 2250, 'evento antigo continua somando todos os tamanhos'); assert.equal(legado(d).unitario, 750); assert.equal(legado(d).itens[0].unitario, undefined);
+const tabelas = {'10x15': [{de: 1, ate: 4, valor: 1000}, {de: 5, ate: null, valor: 600}], '20x30': [{de: 1, ate: 1, valor: 2500}, {de: 2, ate: null, valor: 2000}]};
+for (const [bad, msg] of [[{}, 'sem tabelas'], [{'10x15': []}, 'tamanho sem faixas'], [{'10x15': [{de: 2, ate: null, valor: 100}]}, 'não começa em 1'], [{'10x15': [{de: 1, ate: 4, valor: 1000}, {de: 6, ate: null, valor: 600}]}, 'buraco'], [{'99x99': [{de: 1, ate: null, valor: 100}]}, 'tamanho desconhecido some']])
+  assert.equal((await call('/api/portal/fotos', admin, 'POST', {evento: {nome: 'Teste', tabelas: bad}})).status, 400, msg);
+await json('/api/portal/fotos', admin, 'POST', {evento: {nome: 'Por tamanho', tabelas}});
+const evT = (await json('/api/portal/fotos', admin)).eventos.find(e => e.nome === 'Por tamanho'); assert.deepEqual(Object.keys(evT.tabelas).sort(), ['10x15', '20x30']); assert.equal(evT.faixas, undefined);
+assert.equal(precoFotoTam(evT, '10x15', 1), 1000); assert.equal(precoFotoTam(evT, '10x15', 5), 600); assert.equal(precoFotoTam(evT, '20x30', 2), 2000); assert.equal(precoFotoTam(evT, '15x21', 1), null, 'tamanho que o evento não vende');
+const pedT = async itens => { await ped({...base, eventoId: evT.id, itens, pagamento: 'pendente', anexos: []}); d = await json('/api/portal/fotos', admin); return d.pedidos.filter(o => o.eventoId === evT.id).pop(); };
+let t = await pedT([{tam: '10x15', qtd: 1}]); assert.equal(t.total, 1000); assert.equal(t.unitario, 1000);
+t = await pedT([{tam: '10x15', qtd: 5}]); assert.equal(t.total, 3000, '5 fotos 10x15 = R$ 30,00 (R$ 6,00 cada)'); assert.equal(t.unitario, 600);
+t = await pedT([{tam: '10x15', qtd: 7}]); assert.equal(t.total, 4200);
+t = await pedT([{tam: '10x15', qtd: 2}, {tam: '20x30', qtd: 2}]); assert.equal(t.total, 2 * 1000 + 2 * 2000, 'cada tamanho conta as suas fotos'); assert.equal(t.unitario, null, 'preços diferentes: sem valor único');
+assert.deepEqual(t.itens.map(i => i.unitario), [1000, 2000]); assert.equal(t.fotos, 4);
+t = await pedT([{tam: '10x15', qtd: 3}, {tam: '10x15', qtd: 2}]); assert.equal(t.total, 5 * 600, 'mesmo tamanho em duas linhas soma as quantidades'); assert.equal(t.unitario, 600);
+t = await pedT([{tam: '10x15', qtd: 4}, {tam: '20x30', qtd: 1}]); assert.equal(t.total, 4 * 1000 + 2500);
+assert.equal((await call('/api/portal/fotos', admin, 'POST', {pedido: {...base, eventoId: evT.id, itens: [{tam: '15x21', qtd: 1}], anexos: []}})).status, 400, 'tamanho que o evento não vende');
+// Pagamento em parte usa o total por tamanho.
+await ped({...base, eventoId: evT.id, itens: [{tam: '20x30', qtd: 2}], pagamento: 'parcial', recebido: 1500, anexos: []}); d = await json('/api/portal/fotos', admin);
+t = d.pedidos.filter(o => o.eventoId === evT.id).pop(); assert.equal(t.total, 4000); assert.equal(t.recebido, 1500);
+assert.equal((await call('/api/portal/fotos', admin, 'POST', {pedido: {...base, eventoId: evT.id, itens: [{tam: '20x30', qtd: 2}], pagamento: 'parcial', recebido: 4000, anexos: []}})).status, 400, 'parcial não pode igualar o total');
+assert.equal((await call('/api/portal/fotos', teacher, 'POST', {evento: {nome: 'x', tabelas}})).status, 403, 'professor não cria evento');
 await fs.rm(dir, {recursive: true, force: true});
 
 // Telas: as funções chamadas em onclick existem em window; a aba está no menu e no ＋ Novo; o script é carregado.
@@ -85,5 +109,7 @@ assert.match(central, /make\('fotos'/); assert.match(central, /find\('fotos'\)/)
 // Recibo: valor por extenso.
 const ext = new Function(fotos.match(/function cxExtenso[\s\S]*?\n}\n/)[0] + ';return cxExtenso')();
 assert.equal(ext(2250), 'vinte e dois reais e cinquenta centavos'); assert.equal(ext(100), 'um real'); assert.equal(ext(15000), 'cento e cinquenta reais'); assert.equal(ext(105000), 'mil e cinquenta reais'); assert.equal(ext(123456), 'mil duzentos e trinta e quatro reais e cinquenta e seis centavos');
+for (const t of ['Vender este tamanho neste evento', 'cxFoCalc', 'cxFoEvTam', 'cxFoValTxt', 'cxFoFaixasHtml']) assert.ok(fotos.includes(t), 'tela: ' + t);
+assert.ok(!fotos.includes('cxFoPreco('), 'o preço antigo, igual para todos os tamanhos, saiu da tela');
 assert.match(fotos, /Presidente da APP/); assert.match(fotos, /cxLetterhead\(/);
-console.log('PASS: fotos (pedidos): preço por faixa, pagamento (dinheiro, Pix, parcial), anexos privados e apagados junto, só administração, nada na página pública + telas, menu e recibo.');
+console.log('PASS: fotos (pedidos): preço por faixa e por tamanho, pagamento (dinheiro, Pix, parcial), anexos privados e apagados junto, só administração, nada na página pública + telas, menu e recibo.');

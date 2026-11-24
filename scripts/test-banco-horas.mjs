@@ -110,7 +110,7 @@ for (const f of ['certAddSigner', 'certRemoverSigner', 'certMoverSigner', 'certN
   assert.match(app, new RegExp(`window\\.${f}=`), f);
 for (const t of ['Trabalhou a mais', 'Horário diferente da escala', 'Saída rápida', 'Evento ou trabalho fora da escala', 'Faltou', 'Acertos', 'Pendente de conversa', 'Troca por folga de outro dia'])
   assert.ok(central.includes(t), 'tela: ' + t);
-assert.match(central, /const CX_VERSION = '64'/);
+assert.match(central, /const CX_VERSION = '\d+'/);
 assert.match(app, /certificado:\{icon:'🎓'/); assert.match(app, /openDocGen\('certificado'\)/);
 // O certificado guarda quem assinou para o próximo; sobrescrever reopenGenerated só depois de ele existir.
 assert.ok(app.indexOf('const _reopenGeneratedBase=window.reopenGenerated') > app.indexOf('window.reopenGenerated=id=>{const g='));
