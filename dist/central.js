@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '68';
+const CX_VERSION = '69';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -2745,10 +2745,11 @@ function cxFoEventosHtml() {
   const evs = cxFoEventos();
   return `<div style="display:flex;justify-content:flex-end;margin:8px 0"><button class="cx-btn primary" onclick="cxFoEvForm('')">+ Criar evento</button></div>
     ${evs.map(e => { const n = (cxFo.dados.pedidos || []).filter(o => o.eventoId === e.id).length;
-      return `<div class="cx-item" style="padding:12px 0;border-top:1px solid #eef1f5"><div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"><b style="flex:1">${cxEsc(e.nome)}</b><span class="cx-chip ${e.aberto ? 'ok' : ''}">${e.aberto ? 'Evento aberto' : 'Encerrado'}</span><span class="muted">${n} pedido(s)</span>
+      return `<div class="cx-item" style="padding:12px 0;border-top:1px solid #eef1f5"><div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"><b style="flex:1">${cxEsc(e.nome)}</b>${e.teste ? '<span class="cx-chip" style="background:#fff3cd;color:#664d03">TESTE</span>' : ''}<span class="cx-chip ${e.aberto ? 'ok' : ''}">${e.aberto ? 'Evento aberto' : 'Encerrado'}</span><span class="muted">${n} pedido(s)</span>
         <button class="cx-btn small" onclick="cxFoEvForm('${e.id}')">Editar preços</button><button class="cx-btn small" onclick="cxFoVerPedidos('${e.id}')">Ver pedidos</button>
         <button class="cx-btn small" onclick="cxFoGaleria('${e.id}')">📸 Galeria (${(cxFo.dados.galeria || []).filter(g => g.eventoId === e.id).length})</button>
-        <button class="cx-btn small" onclick="cxFoPastaEvento('${e.id}')" title="Baixar os pedidos pagos, prontos para enviar à revelação">📁 Pasta para revelar</button></div>
+        <button class="cx-btn small" onclick="cxFoPastaEvento('${e.id}')" title="Baixar os pedidos pagos, prontos para enviar à revelação">📁 Pasta para revelar</button>
+        ${e.teste || cxFoEvVazio(e.id) ? `<button class="cx-btn small danger" onclick="cxFoEvExcluir('${e.id}')">Excluir</button>` : ''}</div>
         <p class="muted" style="margin:6px 0 0;line-height:1.6">${cxFoFaixasHtml(e)}</p></div>`; }).join('')}
     <p class="hint">Cada tamanho tem a sua tabela, e a faixa vale pela <b>quantidade de fotos daquele tamanho</b> no pedido. Mudar a tabela não altera pedidos já salvos; só vale para os próximos (ou quando um pedido for editado e salvo de novo).</p>`;
 }
@@ -2774,7 +2775,7 @@ function cxFoEvTabsHtml() {
 }
 function cxFoEvLer() {
   const f = document.getElementById('cxFoEvF'); if (!f) return;
-  cxFo.ev.nome = f.elements.nome.value; cxFo.ev.aberto = f.elements.aberto.checked;
+  cxFo.ev.nome = f.elements.nome.value; cxFo.ev.aberto = f.elements.aberto.checked; if (f.elements.teste) cxFo.ev.teste = f.elements.teste.checked;
   if (f.elements.pixChave) cxFo.ev.pix = {chave: f.elements.pixChave.value, nome: f.elements.pixNome.value, cidade: f.elements.pixCidade.value};
   for (const tam of CX_FO_TAM) { const t = cxFo.ev.tabs[tam];
     t.on = f.elements['on_' + tam].checked;
@@ -2797,7 +2798,7 @@ window.cxFoEvForm = id => {
   const tabs = {}, doEvento = tam => (e.tabelas ? e.tabelas[tam] : e.faixas);
   for (const tam of CX_FO_TAM) { const fx = e && doEvento(tam); tabs[tam] = fx ? {on: true, novo: false, faixas: fx.map(x => ({ate: x.ate == null ? '' : x.ate, valor: x.valor}))} : cxFoTabVazia(); }
   if (!e) { tabs['10x15'].on = true; tabs['10x15'].novo = false; }
-  cxFo.ev = {id: e?.id || '', nome: e?.nome || '', aberto: e ? e.aberto : true, tabs, legado: !!(e && !e.tabelas), pix: e?.pix || {chave: '09303966000172', nome: 'APP CEI LINDOLPHO', cidade: 'ARAQUARI'}};
+  cxFo.ev = {id: e?.id || '', nome: e?.nome || '', aberto: e ? e.aberto : true, teste: !!e?.teste, tabs, legado: !!(e && !e.tabelas), pix: e?.pix || {chave: '09303966000172', nome: 'APP CEI LINDOLPHO', cidade: 'ARAQUARI'}};
   const n = e ? (cxFo.dados.pedidos || []).filter(o => o.eventoId === e.id).length : 0;
   cxModal(`<h2>${e ? 'Editar evento de venda' : 'Novo evento de venda'}</h2>
     <form class="cx-form cx-static-actions" id="cxFoEvF" onsubmit="event.preventDefault();cxFoEvSalvar()">
@@ -2811,9 +2812,10 @@ window.cxFoEvForm = id => {
         <label>Cidade *<input name="pixCidade" required maxlength="15" data-case="off" value="${cxEsc(cxFo.ev.pix.cidade)}"></label>
         <p class="hint full">Já vem com o CNPJ da APP. O nome e a cidade vão no QR code; sem acentos.</p></fieldset>
       <label class="cx-check full"><input type="checkbox" name="aberto" ${cxFo.ev.aberto ? 'checked' : ''}> Evento aberto (aceita novos pedidos)</label>
+      ${!e || e.teste ? `<label class="cx-check full"><input type="checkbox" name="teste" ${cxFo.ev.teste ? 'checked' : ''}> <b>Evento de teste</b>: pode ser excluído a qualquer hora, com os pedidos e as fotos que tiver. ${e ? 'Desmarque para torná-lo um evento real (depois disso, só dá para excluir se estiver vazio).' : 'Depois de salvo, não dá mais para marcar como teste.'}</label>` : ''}
       <p class="hint full">Mudar os preços não altera pedidos já salvos; só vale para os próximos (ou quando um pedido for editado e salvo de novo).</p>
       <p class="hint full" id="cxFoEvErr" style="color:#b3261e" hidden></p>
-      <div class="actions full">${e && !n ? `<button type="button" class="cx-btn danger" onclick="cxFoEvExcluir('${e.id}')">Excluir evento</button>` : ''}<button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar evento</button></div></form>`);
+      <div class="actions full">${e && (e.teste || cxFoEvVazio(e.id)) ? `<button type="button" class="cx-btn danger" onclick="cxFoEvExcluir('${e.id}')">Excluir evento</button>` : ''}<button type="button" onclick="cxCloseModal()">Cancelar</button><button class="primary" type="submit">Salvar evento</button></div></form>`);
 };
 window.cxFoEvSalvar = async () => {
   cxFoEvLer(); const err = document.getElementById('cxFoEvErr'), mostra = m => { err.textContent = m; err.hidden = false; };
@@ -2831,10 +2833,16 @@ window.cxFoEvSalvar = async () => {
     tabelas[tam] = faixas;
   }
   if (!Object.keys(tabelas).length) return mostra('Marque pelo menos um tamanho de foto para vender neste evento.');
-  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({evento: {id: cxFo.ev.id || undefined, nome: cxFo.ev.nome, aberto: cxFo.ev.aberto, tabelas, pix: cxFo.ev.pix}})}); notify('Evento salvo.'); cxCloseModal(); render(); }
+  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({evento: {id: cxFo.ev.id || undefined, nome: cxFo.ev.nome, aberto: cxFo.ev.aberto, teste: cxFo.ev.teste, tabelas, pix: cxFo.ev.pix}})}); notify('Evento salvo.'); cxCloseModal(); render(); }
   catch (e) { mostra(e.message); }
 };
-window.cxFoEvExcluir = async id => { if (!confirm('Excluir este evento de venda? Ele não tem pedidos.')) return; try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({excluirEvento: id})}); notify('Evento excluído.'); cxCloseModal(); render(); } catch (e) { notify(e.message); } };
+const cxFoEvVazio = id => !(cxFo.dados.pedidos || []).some(o => o.eventoId === id) && !(cxFo.dados.galeria || []).some(g => g.eventoId === id);
+window.cxFoEvExcluir = async id => {
+  const e = cxFoEvento(id); if (!e) return;
+  const np = (cxFo.dados.pedidos || []).filter(o => o.eventoId === id).length, nf = (cxFo.dados.galeria || []).filter(g => g.eventoId === id).length;
+  const msg = e.teste ? `Excluir o evento de TESTE "${e.nome}" e tudo que há nele (${np} pedido(s), ${nf} foto(s))? Não dá para desfazer.` : `Excluir o evento "${e.nome}"? Ele está vazio.`;
+  if (!confirm(msg)) return;
+  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({excluirEvento: id})}); notify('Evento excluído.'); cxCloseModal(); render(); } catch (err) { notify(err.message); } };
 
 /* ---------- Pedido ---------- */
 const CX_FO_TIPOS_ANEXO = [['whatsapp', 'Print do WhatsApp com o pedido', 'Imagem da conversa em que o pai fez o pedido'], ['comprovante', 'Comprovante de pagamento', 'Imagem ou PDF do Pix (em dinheiro, não precisa)']];

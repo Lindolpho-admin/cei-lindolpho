@@ -136,7 +136,7 @@ export function cleanEventoFoto(i,old,user){
  if(i.tabelas&&typeof i.tabelas==='object'){const t={};for(const tam of TAM_FOTO)if(Array.isArray(i.tabelas[tam])&&i.tabelas[tam].length)t[tam]=faixasFoto(i.tabelas[tam]);
   if(!Object.keys(t).length)deny('Informe o preço de pelo menos um tamanho de foto.',400);preco.tabelas=t}
  else preco.faixas=faixasFoto(i.faixas);
- return {id:old?.id||crypto.randomUUID(),nome,aberto:i.aberto!==false,...preco,pix:cleanPix(i.pix,old?.pix),criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
+ return {id:old?.id||crypto.randomUUID(),nome,aberto:i.aberto!==false,teste:old?!!old.teste&&i.teste!==false:i.teste===true,...preco,pix:cleanPix(i.pix,old?.pix),criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
 }
 export function cleanPedidoFoto(i,old,p,user){
  const ev=fotosPed(p).eventos.find(e=>e.id===i.eventoId);if(!ev)deny('Escolha o evento de venda.',400);
@@ -350,7 +350,10 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   if(b.registros.length>20000)deny('Limite de registros do banco de horas atingido.',400);
  }else if(path==='/api/portal/fotos'){
   if(user.role!=='admin')deny();const f=p.fotos=fotosPed(p);
-  if(input.excluirEvento){if(f.pedidos.some(o=>o.eventoId===input.excluirEvento))deny('Há pedidos neste evento. Encerre o evento em vez de excluir.',400);if(f.galeria.some(g=>g.eventoId===input.excluirEvento))deny('Há fotos na galeria deste evento. Remova as fotos primeiro.',400);f.codigos=f.codigos.filter(k=>k.eventoId!==input.excluirEvento);f.eventos=f.eventos.filter(e=>e.id!==input.excluirEvento)}
+  if(input.excluirEvento){const ev=f.eventos.find(e=>e.id===input.excluirEvento);if(!ev)deny('Evento não encontrado. Recarregue a página.',404);const evId=ev.id;
+   if(!ev.teste){if(f.pedidos.some(o=>o.eventoId===evId))deny('Há pedidos neste evento. Encerre o evento em vez de excluir.',400);if(f.galeria.some(g=>g.eventoId===evId))deny('Há fotos na galeria deste evento. Remova as fotos primeiro.',400)}
+   else for(const g of f.galeria.filter(g=>g.eventoId===evId)){await bucket.delete('cei/galeria/'+g.id);await bucket.delete('cei/galeria/'+g.id+'-t')}
+   f.pedidos=f.pedidos.filter(o=>o.eventoId!==evId);f.galeria=f.galeria.filter(g=>g.eventoId!==evId);f.codigos=f.codigos.filter(k=>k.eventoId!==evId);f.eventos=f.eventos.filter(e=>e.id!==evId)}
   else if(input.galeriaFoto){const g=input.galeriaFoto;if(!UUID_RE.test(g.id||''))deny('Foto inválida.',400);if(f.galeria.some(x=>x.id===g.id))deny('Esta foto já está na galeria.',409);
    if(!f.eventos.some(e=>e.id===g.eventoId))deny('Escolha o evento.',400);const turma=clip(g.turma,60),crianca=clip(g.crianca,80);if(!turma)deny('Informe a turma.',400);if(!crianca)deny('Informe o nome da criança.',400);
    if(!await bucket.get('cei/galeria/'+g.id)||!await bucket.get('cei/galeria/'+g.id+'-t'))deny('A foto não foi enviada por inteiro. Envie de novo.',400);

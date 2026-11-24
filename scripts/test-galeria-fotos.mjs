@@ -107,4 +107,23 @@ assert.equal(await env.BUCKET.get('cei/galeria/' + f3), null); assert.equal(awai
 assert.equal((await call('/api/portal/fotos', admin, 'POST', {excluirEvento: ev.id})).status, 400);
 await json('/api/portal/fotos', admin, 'POST', {galeriaEditar: {id: f2, crianca: 'Maria Clara', turma: 'Maternal 2'}});
 assert.equal((await json('/api/portal/fotos', admin)).galeria.find(x => x.id === f2).crianca, 'Maria Clara');
+
+// v69: evento de teste pode ser excluído com tudo dentro; evento real com dados não.
+await json('/api/portal/fotos', admin, 'POST', {evento: {...ev0, nome: 'Teste do presidente', teste: true}});
+d = await json('/api/portal/fotos', admin); const evT = d.eventos.find(e => e.nome === 'Teste do presidente'); assert.equal(evT.teste, true);
+assert.equal(d.eventos.find(e => e.id === ev.id).teste, false, 'evento normal não é de teste');
+await json('/api/portal/fotos', admin, 'POST', {evento: {...evT, teste: false}}); assert.equal((await json('/api/portal/fotos', admin)).eventos.find(e => e.id === evT.id).teste, false, 'dá para tornar real');
+await json('/api/portal/fotos', admin, 'POST', {evento: {...evT, teste: true}}); assert.equal((await json('/api/portal/fotos', admin)).eventos.find(e => e.id === evT.id).teste, false, 'real não volta a ser teste');
+await json('/api/portal/fotos', admin, 'POST', {evento: {...ev0, nome: 'Teste 2', teste: true}});
+const evT2 = (await json('/api/portal/fotos', admin)).eventos.find(e => e.nome === 'Teste 2');
+const idT = uuid(); await raw(`/api/portal/galeria-arquivo?id=${idT}&t=o`, admin, jpg(30)); await raw(`/api/portal/galeria-arquivo?id=${idT}&t=t`, admin, jpg(10));
+await json('/api/portal/fotos', admin, 'POST', {galeriaFoto: {id: idT, eventoId: evT2.id, turma: 'Berçário', crianca: 'Teste', bytes: 30}});
+assert.ok(await env.BUCKET.get('cei/galeria/' + idT));
+await json('/api/portal/fotos', admin, 'POST', {excluirEvento: evT2.id});
+d = await json('/api/portal/fotos', admin);
+assert.equal(d.eventos.some(e => e.id === evT2.id), false); assert.equal(d.galeria.some(g => g.eventoId === evT2.id), false); assert.equal(d.codigos.some(k => k.eventoId === evT2.id), false);
+assert.equal(await env.BUCKET.get('cei/galeria/' + idT), null); assert.equal(await env.BUCKET.get('cei/galeria/' + idT + '-t'), null, 'arquivos do evento de teste apagados');
+assert.equal(d.galeria.filter(g => g.eventoId === ev.id).length, 2, 'fotos do evento real intactas');
+await json('/api/portal/fotos', admin, 'POST', {excluirEvento: evT.id});
+assert.equal((await call('/api/portal/fotos', admin, 'POST', {excluirEvento: uuid()})).status, 404);
 console.log('PASS: galeria de fotos por código e pedido online');
