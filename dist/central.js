@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '66';
+const CX_VERSION = '67';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -1435,6 +1435,12 @@ function cxColegReport(orgao, o) {
     meta: lista.length === 1 ? [['Gestão', lista[0].nome], ['Mandato', `${cxBR(lista[0].inicio)} a ${cxBR(lista[0].fim)}`], ...(lista[0].ata ? [['Eleição / posse', lista[0].ata]] : [])] : [['Composições', o.quais === 'todas' ? 'Todas (histórico)' : 'Vigentes hoje']],
     vazio: o.quais === 'todas' ? 'Nenhuma composição cadastrada.' : `Nenhuma composição vigente hoje. Cadastre em ${O.titulo} ou escolha “Todas (histórico)”.`};
 }
+// Relatórios de Fotos (pedidos): filtros comuns. Os dados vêm de cxFo.dados (carregado por cxRelLoad com load: ['fotos']).
+const cxFoRelEventos = () => [['', 'Todos os eventos'], ...cxFoEventos().map(e => [e.id, e.nome])];
+const cxFoRelSituacoes = padrao => () => padrao ? [['aberto', 'Ainda não entregues'], ['', 'Todas'], ...Object.entries(CX_FO_SIT)] : [['', 'Todas'], ['aberto', 'Ainda não entregues'], ...Object.entries(CX_FO_SIT)];
+const cxFoRelPorTurma = (a, b) => cxCol.compare(a.turma || '~', b.turma || '~') || cxCol.compare(a.crianca, b.crianca);
+const cxFoRelBase = o => cxFoPedidos().filter(x => (!o.evento || x.eventoId === o.evento) && (!o.situacao || (o.situacao === 'aberto' ? x.situacao !== 'entregue' : x.situacao === o.situacao)) && (!o.pag || (o.pag === 'falta' ? cxFoFalta(x) > 0 : cxFoFalta(x) === 0)));
+const cxFoRelMeta = o => [['Evento', o.evento ? (cxFoEvento(o.evento)?.nome || '') : 'Todos'], ['Situação', o.situacao === 'aberto' ? 'Ainda não entregues' : o.situacao ? CX_FO_SIT[o.situacao] : 'Todas']];
 const CX_RELATORIOS = [
   {grupo: 'Colegiados', id: 'conselho', titulo: 'Composição do Conselho Escolar', desc: 'Membros, cargos, segmentos e contatos.', icone: '◇', load: ['colegiados', 'equipe'],
     opcoes: [['quais', 'Composições', [['vigente', 'Vigente hoje'], ['todas', 'Todas (histórico)']]], ['contatos', 'Contatos', [['sim', 'Com telefone e e-mail'], ['nao', 'Sem contatos']]]],
@@ -1453,6 +1459,27 @@ const CX_RELATORIOS = [
       const por = CX_EQ_CATS.map(([k]) => [cxEqCat(k), (cx.equipe || []).filter(e => e.categoria === k && (!o.grupo || k === o.grupo)).length]).filter(([, n]) => n);
       return {titulo: 'Equipe da instituição', colunas: [['grupo', 'Grupo'], ['nome', 'Nome'], ['funcao', 'Função'], ['vinculo', 'Vínculo'], ['atuacao', 'Atuação'], ...(o.contatos !== 'nao' ? [['telefone', 'Telefone'], ['email', 'E-mail']] : [])], linhas, pessoal: o.contatos !== 'nao', paisagem: o.contatos !== 'nao', manter: o.contatos !== 'nao' ? ['telefone', 'email'] : [],
         resumo: por.map(([g, n]) => `${g}: ${n}`).join(' · '), vazio: 'Nenhuma pessoa cadastrada em Equipe da instituição.'}; }},
+  {grupo: 'Fotos', id: 'fotospedidos', titulo: 'Pedidos de fotos', desc: 'Todos os pedidos: quem pediu, o que, quanto, pagamento e situação.', icone: '📸', load: ['fotos'],
+    opcoes: [['evento', 'Evento', cxFoRelEventos], ['situacao', 'Situação do pedido', cxFoRelSituacoes('')], ['pag', 'Pagamento', [['', 'Todos'], ['falta', 'Falta pagar'], ['pago', 'Já pagos']]], ['ordem', 'Ordem', [['data', 'Data do pedido'], ['turma', 'Turma e criança'], ['nome', 'Nome do responsável']]]],
+    gerar: o => { const ps = cxFoRelBase(o).sort({data: (a, b) => String(a.data).localeCompare(String(b.data)), turma: cxFoRelPorTurma, nome: (a, b) => cxCol.compare(a.responsavel, b.responsavel)}[o.ordem] || (() => 0));
+      const soma = k => ps.reduce((t, x) => t + (k === 'falta' ? cxFoFalta(x) : x[k] || 0), 0); // a coluna de valores se chama vtotal: o nome "total" é reservado para a linha de total do relatório
+      const linhas = ps.map(x => ({data: cxBR(x.data), responsavel: x.responsavel, telefone: x.telefone, crianca: x.crianca, turma: x.turma, itens: cxFoItensTxt(x), qtd: x.fotos, vtotal: cxMoney(x.total), recebido: cxMoney(x.recebido), falta: cxFoFalta(x) ? cxMoney(cxFoFalta(x)) : '', pagamento: CX_FO_PAG[x.pagamento] + (x.forma && x.pagamento !== 'pendente' ? ' · ' + CX_FO_FORMA[x.forma] : ''), situacao: CX_FO_SIT[x.situacao], anexos: (x.anexos || []).length || ''}));
+      if (linhas.length) linhas.push({total: true, responsavel: 'Total', qtd: soma('fotos'), vtotal: cxMoney(soma('total')), recebido: cxMoney(soma('recebido')), falta: cxMoney(soma('falta'))});
+      return {titulo: 'Pedidos de fotos', meta: cxFoRelMeta(o), pessoal: true, paisagem: true, colunas: [['data', 'Data'], ['responsavel', 'Responsável'], ['telefone', 'Telefone'], ['crianca', 'Criança'], ['turma', 'Turma'], ['itens', 'Fotos pedidas'], ['qtd', 'Fotos', 'num'], ['vtotal', 'Total', 'num'], ['recebido', 'Recebido', 'num'], ['falta', 'Falta pagar', 'num'], ['pagamento', 'Pagamento'], ['situacao', 'Situação'], ['anexos', 'Anexos', 'num']], linhas,
+        resumo: `${ps.length} pedido(s) · ${soma('fotos')} foto(s) · total ${cxMoney(soma('total'))} · recebido ${cxMoney(soma('recebido'))} · falta pagar ${cxMoney(soma('falta'))}`, vazio: 'Nenhum pedido com esses filtros.'}; }},
+  {grupo: 'Fotos', id: 'fotosproducao', titulo: 'Fotos para produzir', desc: 'Quantas fotos de cada tamanho imprimir (soma dos pedidos).', icone: '🖨', load: ['fotos'],
+    opcoes: [['evento', 'Evento', cxFoRelEventos], ['situacao', 'Situação do pedido', cxFoRelSituacoes('aberto')], ['pag', 'Pagamento', [['', 'Todos os pedidos'], ['pago', 'Só pedidos já pagos']]]],
+    gerar: o => { const ps = cxFoRelBase(o), tot = {};
+      for (const x of ps) for (const i of x.itens || []) { const t = tot[i.tam] ||= {fotos: 0, ped: new Set(), valor: 0}; t.fotos += i.qtd; t.ped.add(x.id); t.valor += (i.unitario ?? x.unitario ?? 0) * i.qtd; }
+      const linhas = CX_FO_TAM.filter(t => tot[t]).map(t => ({tam: cxFoTam(t) + ' cm', fotos: tot[t].fotos, pedidos: tot[t].ped.size, valor: cxMoney(tot[t].valor)}));
+      const f = Object.values(tot).reduce((t, x) => t + x.fotos, 0), v = Object.values(tot).reduce((t, x) => t + x.valor, 0);
+      if (linhas.length) linhas.push({total: true, tam: 'Total', fotos: f, pedidos: ps.length, valor: cxMoney(v)});
+      return {titulo: 'Fotos para produzir', meta: cxFoRelMeta(o), colunas: [['tam', 'Tamanho'], ['fotos', 'Fotos a imprimir', 'num'], ['pedidos', 'Pedidos', 'num'], ['valor', 'Valor', 'num']], linhas, resumo: `${f} foto(s) em ${ps.length} pedido(s)`, vazio: 'Nenhum pedido com esses filtros.'}; }},
+  {grupo: 'Fotos', id: 'fotosentrega', titulo: 'Entrega das fotos por turma', desc: 'Lista para a retirada: turma, criança, quanto falta pagar e espaço para assinatura.', icone: '📦', load: ['fotos'],
+    opcoes: [['evento', 'Evento', cxFoRelEventos], ['situacao', 'Situação do pedido', cxFoRelSituacoes('aberto')]],
+    gerar: o => { const ps = cxFoRelBase(o).sort(cxFoRelPorTurma), receber = ps.reduce((t, x) => t + cxFoFalta(x), 0);
+      const linhas = ps.map(x => ({turma: x.turma, crianca: x.crianca, responsavel: x.responsavel, telefone: x.telefone, itens: cxFoItensTxt(x), receber: cxFoFalta(x) ? cxMoney(cxFoFalta(x)) : 'Pago', situacao: CX_FO_SIT[x.situacao], assinatura: ''}));
+      return {titulo: 'Entrega das fotos por turma', meta: cxFoRelMeta(o), pessoal: true, paisagem: true, manter: ['assinatura'], colunas: [['turma', 'Turma'], ['crianca', 'Criança'], ['responsavel', 'Responsável'], ['telefone', 'Telefone'], ['itens', 'Fotos'], ['receber', 'A receber', 'num'], ['situacao', 'Situação'], ['assinatura', 'Assinatura de quem retirou']], linhas, resumo: `${ps.length} pedido(s) · a receber na retirada ${cxMoney(receber)}`, vazio: 'Nenhum pedido com esses filtros.'}; }},
   {grupo: 'Pessoas', id: 'bancohoras', titulo: 'Banco de horas', desc: 'Saldo de cada profissional: quanto o CEI deve e quanto devem ao CEI.', icone: '⏱', load: ['banco'],
     opcoes: [['grupo', 'Grupo', [['', 'Todos'], ...CX_EQ_CATS.map(([k]) => [k, cxEqCat(k)])]], ['quem', 'Mostrar', [['', 'Todos'], ['saldo', 'Só quem tem saldo'], ['pos', 'O CEI deve'], ['neg', 'Devem ao CEI']]]],
     gerar: o => { const ps = cxBhPessoas().filter(p => (!o.grupo || p.categoria === o.grupo) && (!o.quem || (o.quem === 'saldo' ? p.saldo : o.quem === 'pos' ? p.saldo > 0 : p.saldo < 0))), regs = cxBhRegs();
@@ -1541,7 +1568,7 @@ const CX_RELATORIOS = [
 ];
 async function cxRelLoad(def) {
   const need = def.load || [];
-  await Promise.all([need.includes('turmas') && cxTurLoad(true), need.includes('colegiados') && cxLoadColegiados(true), need.includes('equipe') && cxLoadEquipe(true), need.includes('banco') && cxBancoLoad(), (need.includes('records') || def.opcoes.some(o => typeof o[2] === 'function')) && cxLoad(true)].filter(Boolean));
+  await Promise.all([need.includes('turmas') && cxTurLoad(true), need.includes('colegiados') && cxLoadColegiados(true), need.includes('equipe') && cxLoadEquipe(true), need.includes('banco') && cxBancoLoad(), need.includes('fotos') && cxFoLoad(), (need.includes('records') || def.opcoes.some(o => typeof o[2] === 'function')) && cxLoad(true)].filter(Boolean));
 }
 // Ordem alfabética que ignora pontuação e aspas no início (": a Bela…", "\"a Linha…\"").
 const cxCol = new Intl.Collator('pt-BR', {sensitivity: 'base', ignorePunctuation: true, numeric: true});
@@ -1562,7 +1589,7 @@ async function cxRenderRelatorios(a) {
   const r = def.gerar(opts);
   const max = 200, rows = r.linhas.slice(0, max), cols = cxRelCols(r), ocultas = r.colunas.length - cols.length;
   document.getElementById('cxRelMain').innerHTML = `<div class="cx-head"><div><h2>${cxEsc(r.titulo)}</h2><p>${cxEsc(def.desc)}</p></div>
-      <div class="cx-btns"><button class="cx-btn primary" onclick="cxRelPrint()" ${r.linhas.length ? '' : 'disabled'}>🖨 Imprimir / PDF</button><button class="cx-btn" onclick="cxRelCsv()" ${r.linhas.length ? '' : 'disabled'}>⬇ Planilha (Excel)</button></div></div>
+      <div class="cx-btns"><button class="cx-btn primary" onclick="cxRelPrint()" ${r.linhas.length ? '' : 'disabled'}>🖨 Imprimir / PDF</button><button class="cx-btn" onclick="cxRelXlsx()" ${r.linhas.length ? '' : 'disabled'}>⬇ Excel (.xlsx)</button><button class="cx-btn" onclick="cxRelCsv()" ${r.linhas.length ? '' : 'disabled'} title="Arquivo simples, abre em qualquer planilha">⬇ CSV</button></div></div>
     ${campos.length ? `<div class="cx-rel-opts">${campos.map(([k, label, list]) => `<label>${cxEsc(label)}<select onchange="cxRelOpt('${k}', this.value)">${list.map(([v, t]) => `<option value="${cxEsc(v)}" ${opts[k] === v ? 'selected' : ''}>${cxEsc(t)}</option>`).join('')}</select></label>`).join('')}</div>` : ''}
     ${(r.meta || []).length ? `<p class="cx-rel-meta">${r.meta.map(([k, v]) => `<span><b>${cxEsc(k)}:</b> ${cxEsc(v)}</span>`).join('')}</p>` : ''}
     ${r.aviso ? `<div class="cx-empty" style="border:1.5px dashed #e8c76a;background:#fff8e1;color:#7a5700;margin:10px 0;text-align:left">${cxEsc(r.aviso)}</div>` : ''}
@@ -1577,6 +1604,47 @@ async function cxRenderRelatorios(a) {
 window.cxRelSel = id => { cxR.sel = id; render(); };
 window.cxRelOpt = (k, v) => { (cxR.opts[cxR.sel] ||= {})[k] = v; render(); };
 const cxRelArquivo = r => `${cxNomeKey(r.titulo).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${cxToday()}`;
+/*xlsx-begin*/
+// Planilha .xlsx de verdade (sem biblioteca): um arquivo ZIP sem compressão com as partes mínimas do Excel. Números e valores em R$ viram células numéricas.
+function cxCrc32(b) { const t = cxCrc32.t ||= Array.from({length: 256}, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; }); let x = 0xFFFFFFFF; for (const v of b) x = t[(x ^ v) & 255] ^ (x >>> 8); return (x ^ 0xFFFFFFFF) >>> 0; }
+function cxZipStore(files) {
+  const enc = new TextEncoder(), u16 = n => [n & 255, n >> 8 & 255], u32 = n => [n & 255, n >> 8 & 255, n >> 16 & 255, n >> 24 & 255], partes = [], cen = []; let off = 0;
+  for (const f of files) {
+    const nm = enc.encode(f.name), dados = enc.encode(f.text), crc = cxCrc32(dados), sz = dados.length;
+    const lh = new Uint8Array([0x50, 0x4b, 3, 4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0)]);
+    partes.push(lh, nm, dados);
+    cen.push(new Uint8Array([0x50, 0x4b, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+    off += lh.length + nm.length + sz;
+  }
+  const cenLen = cen.reduce((t, a) => t + a.length, 0);
+  const fim = new Uint8Array([0x50, 0x4b, 5, 6, 0, 0, 0, 0, ...u16(files.length), ...u16(files.length), ...u32(cenLen), ...u32(off), 0, 0]);
+  return new Blob([...partes, ...cen, fim], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function cxXlsxBlob(r) {
+  const X = v => String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const L = i => { let t = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) t = String.fromCharCode(65 + (i - 1) % 26) + t; return t; };
+  const cel = (ref, v, num, estilo) => { const t = cxRelCell(v).replace(/\r?\n/g, ' ').trim(); if (!t) return ''; const m = t.match(/^R\$\s?(-?[\d.]+),(\d{2})$/);
+    if (m) return `<c r="${ref}" s="2"><v>${Number(m[1].replace(/\./g, '') + '.' + m[2])}</v></c>`; if (num && /^-?\d{1,9}$/.test(t)) return `<c r="${ref}"><v>${t}</v></c>`;
+    return `<c r="${ref}"${estilo ? ` s="${estilo}"` : ''} t="inlineStr"><is><t xml:space="preserve">${X(t)}</t></is></c>`; };
+  const cols = r.colunas, larg = cols.map(([k, t]) => Math.min(60, Math.max(10, String(t).length + 2, ...r.linhas.map(l => cxRelCell(l[k]).length + 2))));
+  const linhas = [`<row r="1">${cols.map(([, t], c) => cel(L(c) + '1', t, false, 1)).join('')}</row>`, ...r.linhas.map((l, i) => `<row r="${i + 2}">${cols.map(([k, , al], c) => cel(L(c) + (i + 2), l[k], al === 'num', l.total ? 3 : 0)).join('')}</row>`)];
+  const ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main', rel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships', xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const nome = String(r.titulo).replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31) || 'Relatório';
+  return cxZipStore([
+    {name: '[Content_Types].xml', text: xml + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'},
+    {name: '_rels/.rels', text: xml + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name: 'xl/workbook.xml', text: xml + `<workbook xmlns="${ns}" xmlns:r="${rel}"><sheets><sheet name="${X(nome)}" sheetId="1" r:id="rId1"/></sheets></workbook>`},
+    {name: 'xl/_rels/workbook.xml.rels', text: xml + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${rel}/styles" Target="styles.xml"/></Relationships>`},
+    {name: 'xl/styles.xml', text: xml + `<styleSheet xmlns="${ns}"><numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;R$&quot;\\ #,##0.00"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF2F56B0"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`},
+    {name: 'xl/worksheets/sheet1.xml', text: xml + `<worksheet xmlns="${ns}"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${larg.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${linhas.join('')}</sheetData></worksheet>`}
+  ]);
+}
+/*xlsx-end*/
+window.cxRelXlsx = () => {
+  const r = cxR.atual; if (!r) return;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(cxXlsxBlob(r)); a.download = cxRelArquivo(r) + '.xlsx'; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  notify('Planilha Excel baixada (.xlsx). Ela também abre no Google Planilhas.');
+};
 window.cxRelCsv = () => {
   const r = cxR.atual; if (!r) return;
   const q = v => { const t = cxRelCell(v).replace(/\r?\n/g, ' '); return /[";\n]/.test(t) || /^[=+\-@]/.test(t) ? '"' + (/^[=+\-@]/.test(t) ? "'" : '') + t.replace(/"/g, '""') + '"' : t; }; // evita fórmulas maliciosas no Excel
@@ -2633,13 +2701,14 @@ async function cxRenderFotos(a) {
   const tabs = [['pedidos', 'Pedidos'], ['eventos', 'Eventos de venda e preços']];
   a.innerHTML = `<div id="cxFoTopo"></div>
     <div class="panel"><div class="cx-head"><div><h2>Fotos — pedidos dos pais</h2><p>Registre quem pediu, o tamanho e a quantidade, o telefone para avisar, o print do WhatsApp e o comprovante de pagamento. O preço de cada foto vem do <b>evento de venda</b>. Só a administração vê esta aba.</p></div>
-      <div class="cx-btns"><button class="cx-btn primary" onclick="cxFoForm('')" ${sem ? 'disabled' : ''}>+ Novo pedido</button></div></div>
+      <div class="cx-btns"><button class="cx-btn" onclick="cxFoRelatorios()">📄 Relatórios</button><button class="cx-btn primary" onclick="cxFoForm('')" ${sem ? 'disabled' : ''}>+ Novo pedido</button></div></div>
       ${sem ? `<div class="cx-empty">Para começar, crie um <b>evento de venda</b> (por exemplo, “Fotos de fim de ano 2026”) com os preços por quantidade.<div style="margin-top:10px"><button class="cx-btn primary" onclick="cxFoEvForm('')">Criar o primeiro evento</button></div></div>` : `
       <nav class="cx-subtabs" role="tablist">${tabs.map(([k, t]) => `<button role="tab" aria-selected="${cxFo.aba === k}" class="${cxFo.aba === k ? 'on' : ''}" onclick="cxFoAba('${k}')">${t}</button>`).join('')}</nav>
       <div id="cxFoCont"></div>`}</div>`;
   if (!sem) cxFoConteudo();
   if (cxFo.abrirNovo) { cxFo.abrirNovo = false; if (!sem) cxFoForm(''); else cxFoEvForm(''); }
 }
+window.cxFoRelatorios = () => { cxR.sel = 'fotospedidos'; cxGo('relatorios'); };
 window.cxFoAba = k => { cxFo.aba = k; render(); };
 function cxFoConteudo() {
   const el = document.getElementById('cxFoCont'); if (!el) return;

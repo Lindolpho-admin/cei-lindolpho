@@ -113,3 +113,19 @@ for (const t of ['Vender este tamanho neste evento', 'cxFoCalc', 'cxFoEvTam', 'c
 assert.ok(!fotos.includes('cxFoPreco('), 'o preço antigo, igual para todos os tamanhos, saiu da tela');
 assert.match(fotos, /Presidente da APP/); assert.match(fotos, /cxLetterhead\(/);
 console.log('PASS: fotos (pedidos): preço por faixa e por tamanho, pagamento (dinheiro, Pix, parcial), anexos privados e apagados junto, só administração, nada na página pública + telas, menu e recibo.');
+
+// v67: relatórios de fotos (pedidos, produção, entrega) e planilha .xlsx.
+{
+  const central = await fs.readFile('dist/central.js', 'utf8');
+  for (const id of ['fotospedidos', 'fotosproducao', 'fotosentrega']) assert.match(central, new RegExp(`id: '${id}'`), id);
+  for (const f of ['cxRelXlsx', 'cxFoRelatorios']) assert.match(central, new RegExp(`window\\.${f} = `), f);
+  assert.match(central, /load: \['fotos'\]/); assert.match(central, /need\.includes\('fotos'\) && cxFoLoad\(\)/);
+  assert.doesNotMatch(central, /\['total', 'Total', 'num'\], \['recebido'/, 'a coluna de valores não pode se chamar "total" (nome reservado da linha de total)');
+  const code = central.slice(central.indexOf('/*xlsx-begin*/'), central.indexOf('/*xlsx-end*/'));
+  const cxXlsxBlob = new Function('cxRelCell', code + ';return cxXlsxBlob')(v => v === undefined || v === null ? '' : String(v));
+  const buf = Buffer.from(await cxXlsxBlob({titulo: 'Pedidos: teste/1', colunas: [['a', 'Nome'], ['q', 'Fotos', 'num'], ['v', 'Valor', 'num']], linhas: [{a: '=HYPERLINK("x")', q: 3, v: 'R$ 1.234,56'}, {total: true, a: 'Total', q: 3, v: 'R$ 1.234,56'}]}).arrayBuffer());
+  assert.equal(buf.subarray(0, 2).toString(), 'PK'); const txt = buf.toString('latin1');
+  for (const nome of ['[Content_Types].xml', 'xl/workbook.xml', 'xl/worksheets/sheet1.xml', 'xl/styles.xml']) assert.ok(txt.includes(nome), nome);
+  assert.ok(txt.includes('<v>1234.56</v>'), 'valor em R$ vira número'); assert.ok(txt.includes('t="inlineStr"') && txt.includes('=HYPERLINK'), 'texto que parece fórmula fica como texto');
+  console.log('PASS: relatórios de fotos e planilha .xlsx.');
+}
