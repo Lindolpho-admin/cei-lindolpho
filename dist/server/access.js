@@ -116,7 +116,7 @@ function bancoHoras(p){const b=p.bancoHoras&&typeof p.bancoHoras==='object'?p.ba
 // Dados de crianças e telefones: só a administração (nunca na página pública nem no espaço do professor).
 const TAM_FOTO=['10x15','15x21','20x25','20x30'],PAG_FOTO=['pendente','parcial','pago'],SIT_FOTO=['recebido','producao','pronto','entregue'],FORMA_FOTO=['pix','dinheiro','cartao','outro'],TIPO_ANEXO=['whatsapp','comprovante','outro'];
 const UUID_RE=/^[a-f0-9-]{36}$/;
-function fotosPed(p){const f=p.fotos&&typeof p.fotos==='object'?p.fotos:{};return {eventos:Array.isArray(f.eventos)?f.eventos:[],pedidos:Array.isArray(f.pedidos)?f.pedidos:[]}}
+function fotosPed(p){const f=p.fotos&&typeof p.fotos==='object'?p.fotos:{};return {eventos:Array.isArray(f.eventos)?f.eventos:[],pedidos:Array.isArray(f.pedidos)?f.pedidos:[],galeria:Array.isArray(f.galeria)?f.galeria:[],codigos:Array.isArray(f.codigos)?f.codigos:[]}}
 export function anexosFotos(p){const s=new Set();for(const o of fotosPed(p).pedidos)for(const a of o.anexos||[])s.add(a.id);return s}
 const inteiro=(v,min,max,msg)=>{const n=Number(v);if(v===''||v==null||!Number.isInteger(n)||n<min||n>max)deny(msg,400);return n};
 export function precoFoto(ev,qtd){const f=(ev.faixas||[]).find(x=>qtd>=x.de&&(x.ate==null||qtd<=x.ate));return f?f.valor:null}
@@ -136,7 +136,7 @@ export function cleanEventoFoto(i,old,user){
  if(i.tabelas&&typeof i.tabelas==='object'){const t={};for(const tam of TAM_FOTO)if(Array.isArray(i.tabelas[tam])&&i.tabelas[tam].length)t[tam]=faixasFoto(i.tabelas[tam]);
   if(!Object.keys(t).length)deny('Informe o preço de pelo menos um tamanho de foto.',400);preco.tabelas=t}
  else preco.faixas=faixasFoto(i.faixas);
- return {id:old?.id||crypto.randomUUID(),nome,aberto:i.aberto!==false,...preco,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
+ return {id:old?.id||crypto.randomUUID(),nome,aberto:i.aberto!==false,...preco,pix:cleanPix(i.pix,old?.pix),criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
 }
 export function cleanPedidoFoto(i,old,p,user){
  const ev=fotosPed(p).eventos.find(e=>e.id===i.eventoId);if(!ev)deny('Escolha o evento de venda.',400);
@@ -160,6 +160,41 @@ export function cleanPedidoFoto(i,old,p,user){
  const an=Array.isArray(i.anexos)?i.anexos:[];if(an.length>6)deny('Máximo de 6 anexos por pedido.',400);
  const anexos=an.map(a=>{if(!UUID_RE.test(a.id||''))deny('Anexo inválido.',400);return {id:a.id,nome:clip(a.nome,80)||'anexo',tipo:TIPO_ANEXO.includes(a.tipo)?a.tipo:'outro'}});
  return {id:old?.id||crypto.randomUUID(),eventoId:ev.id,eventoNome:ev.nome,responsavel,telefone,crianca,turma:clip(i.turma,60),data:i.data||old?.data||todayBR(),itens,fotos,unitario,total,pagamento,recebido,forma:FORMA_FOTO.includes(i.forma)?i.forma:'',situacao:SIT_FOTO.includes(i.situacao)?i.situacao:'recebido',anexos,obs:clip(i.obs,300),criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),por:user.email};
+}
+
+// v68: galeria de fotos por turma, com código. A foto digital é um presente do CEI (qualquer pessoa com o código baixa o original); só a impressa é vendida.
+// Originais e miniaturas ficam no R2 (cei/galeria/<id> e cei/galeria/<id>-t). O pedido online entra na aba Fotos como "pagamento pendente" até a administração conferir o Pix.
+export const PIX_PADRAO={chave:'09303966000172',nome:'APP CEI LINDOLPHO',cidade:'ARAQUARI'};
+const semAcento=v=>String(v??'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\x20-\x7e]/g,'');
+function cleanPix(i,old){const b=old||PIX_PADRAO,x=i&&typeof i==='object'?i:{};
+ const chave=clip(x.chave??b.chave,77).replace(/\s/g,''),nome=semAcento(clip(x.nome??b.nome,25)).toUpperCase().trim(),cidade=semAcento(clip(x.cidade??b.cidade,15)).toUpperCase().trim();
+ if(!chave)deny('Informe a chave Pix do evento.',400);if(!nome||!cidade)deny('Informe o nome e a cidade que aparecem no Pix.',400);return {chave,nome,cidade}}
+export const normCodigo=c=>String(c??'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
+const ALFA_COD='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function novoCodigo(f){for(let t=0;t<50;t++){const b=crypto.getRandomValues(new Uint8Array(6));const c=[...b].map(x=>ALFA_COD[x%ALFA_COD.length]).join('');if(!f.codigos.some(k=>k.codigo===c))return c}deny('Não consegui gerar um código novo. Tente de novo.',500)}
+function garantirCodigo(f,eventoId,turma){let k=f.codigos.find(x=>x.eventoId===eventoId&&x.turma===turma);if(!k){k={eventoId,turma,codigo:novoCodigo(f),ativo:true,criadoEm:new Date().toISOString()};f.codigos.push(k)}return k}
+export function acharCodigo(p,c){const n=normCodigo(c);if(n.length<4)return null;const f=fotosPed(p),k=f.codigos.find(x=>x.codigo===n&&x.ativo!==false);if(!k)return null;const ev=f.eventos.find(e=>e.id===k.eventoId);return ev?{k,ev,f}:null}
+export function fotoDoCodigo(p,c,id){const a=acharCodigo(p,c);if(!a||!UUID_RE.test(id||''))return null;const g=a.f.galeria.find(x=>x.id===id&&x.eventoId===a.k.eventoId&&x.turma===a.k.turma);return g?{...a,g}:null}
+function galeriaPublica(p,c){const a=acharCodigo(p,c);if(!a)deny('Código não encontrado. Confira com a escola.',404);const {k,ev,f}=a;
+ return {evento:{id:ev.id,nome:ev.nome,aberto:ev.aberto!==false,...(ev.tabelas?{tabelas:ev.tabelas}:{faixas:ev.faixas}),pix:cleanPix(null,ev.pix)},turma:k.turma,fotos:f.galeria.filter(g=>g.eventoId===k.eventoId&&g.turma===k.turma).sort((x,y)=>x.crianca.localeCompare(y.crianca,'pt-BR')).map(g=>({id:g.id,crianca:g.crianca}))}}
+async function pedidoOnline(input,p,data,bucket){
+ if(clip(input.site,40))return {ok:true,pedido:'------',total:0};
+ const a=acharCodigo(p,input.c);if(!a)deny('Código não encontrado. Confira com a escola.',404);const {k,ev,f}=a;
+ if(ev.aberto===false)deny('Os pedidos deste evento já foram encerrados.',400);
+ const its=Array.isArray(input.itens)?input.itens:[];if(!its.length||its.length>40)deny('Escolha ao menos uma foto.',400);
+ const escolhidas=its.map(x=>{const g=f.galeria.find(y=>y.id===x?.fotoId&&y.eventoId===k.eventoId&&y.turma===k.turma);if(!g)deny('Uma das fotos escolhidas não está mais na galeria. Atualize a página.',400);
+  if(!TAM_FOTO.includes(x.tam))deny('Tamanho de foto inválido.',400);return {fotoId:g.id,crianca:g.crianca,tam:x.tam,qtd:inteiro(x.qtd,1,50,'Quantidade inválida (de 1 a 50).')}});
+ const por={};for(const x of escolhidas)por[x.tam]=(por[x.tam]||0)+x.qtd;
+ const tel=clip(input.telefone,30).replace(/\D/g,'');const dia=Date.now()-864e5;
+ if(f.pedidos.filter(o=>o.origem==='online'&&o.pagamento==='pendente'&&String(o.telefone).replace(/\D/g,'')===tel&&Date.parse(o.criadoEm)>dia).length>=5)deny('Já recebemos seus pedidos. Aguarde a confirmação do pagamento pela escola.',429);
+ if(f.pedidos.filter(o=>o.origem==='online'&&o.pagamento==='pendente').length>=500)deny('Muitos pedidos aguardando conferência. Fale com a escola.',429);
+ const an=input.anexo;if(!an||!UUID_RE.test(an.id||''))deny('Anexe o comprovante do Pix.',400);if(!await bucket.get('cei/pedidos-fotos/'+an.id))deny('O comprovante não foi enviado. Anexe de novo.',400);
+ const nomes=[...new Set(escolhidas.map(x=>x.crianca))];
+ const ped=cleanPedidoFoto({eventoId:ev.id,responsavel:input.responsavel,crianca:nomes.join(', ').slice(0,100),telefone:input.telefone,turma:k.turma,itens:Object.entries(por).map(([tam,qtd])=>({tam,qtd})),pagamento:'pendente',forma:'pix',situacao:'recebido',anexos:[{id:an.id,nome:clip(an.nome,80)||'comprovante',tipo:'comprovante'}],obs:input.obs},null,p,{email:'pedido online'});
+ ped.origem='online';ped.escolhidas=escolhidas.map(({fotoId,tam,qtd})=>({fotoId,tam,qtd}));
+ p.fotos=f;f.pedidos.push(ped);if(f.pedidos.length>5000)deny('Limite de pedidos atingido. Fale com a escola.',400);
+ data.portal=p;data.savedAt=new Date().toISOString();await bucket.put(KEY,JSON.stringify(data));
+ return {ok:true,pedido:ped.id.slice(0,6).toUpperCase(),total:ped.total};
 }
 // v60: links úteis. A área restrita vê todos; o espaço do professor e a página pública veem só os marcados para eles.
 const CORES_LINK=['azul','verde','laranja','vermelho','roxo','turquesa','rosa','cinza'];
@@ -250,6 +285,8 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
  const data=user.data,p=data.portal||{members:[],requests:[],publicIds:[]};
  if(path==='/api/public/home'){const meta=p.publicMeta||{},todos=await listRecords(bucket);const materials=todos.filter(r=>!r.internal&&r.file&&p.publicIds.includes(r.id)).map(r=>({id:r.id,title:r.title,kind:r.kind,date:r.date||r.competence||'',category:PUBLIC_CATEGORIES.includes(meta[r.id]?.category)?meta[r.id].category:guessCategory(r),description:clip(meta[r.id]?.description,300),mime:r.file.mime,size:r.file.size}));return {info:{...DEFAULT_INFO,...(p.info||{})},notices:publicNotices(p).map(({id,title,body,date,until,pinned})=>({id,title,body,date,until,pinned:!!pinned})),materials,...publicEquipe(p),contas:publicContas(p,todos),turmas:publicTurmas(p),links:linksPara(p,'publico')}}
  if(path==='/api/public/materials')return (await listRecords(bucket)).filter(r=>!r.internal&&p.publicIds.includes(r.id)).map(({id,title,kind,date,file})=>({id,title,kind,date,hasFile:!!file}));
+ if(path==='/api/public/galeria'&&method==='GET')return galeriaPublica(p,new URL(request.url).searchParams.get('c'));
+ if(path==='/api/public/galeria/pedido'&&method==='POST')return pedidoOnline(await request.json(),p,data,bucket);
  if(!['admin','teacher'].includes(user.role))deny();
  if(method==='GET'){
   if(path==='/api/portal/members'){if(user.role!=='admin')deny();const c=p.credentials||{};return p.members.map(m=>({...m,hasPassword:!!c[m.email],mustChange:!!c[m.email]?.mustChange}));}
@@ -313,7 +350,16 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   if(b.registros.length>20000)deny('Limite de registros do banco de horas atingido.',400);
  }else if(path==='/api/portal/fotos'){
   if(user.role!=='admin')deny();const f=p.fotos=fotosPed(p);
-  if(input.excluirEvento){if(f.pedidos.some(o=>o.eventoId===input.excluirEvento))deny('Há pedidos neste evento. Encerre o evento em vez de excluir.',400);f.eventos=f.eventos.filter(e=>e.id!==input.excluirEvento)}
+  if(input.excluirEvento){if(f.pedidos.some(o=>o.eventoId===input.excluirEvento))deny('Há pedidos neste evento. Encerre o evento em vez de excluir.',400);if(f.galeria.some(g=>g.eventoId===input.excluirEvento))deny('Há fotos na galeria deste evento. Remova as fotos primeiro.',400);f.codigos=f.codigos.filter(k=>k.eventoId!==input.excluirEvento);f.eventos=f.eventos.filter(e=>e.id!==input.excluirEvento)}
+  else if(input.galeriaFoto){const g=input.galeriaFoto;if(!UUID_RE.test(g.id||''))deny('Foto inválida.',400);if(f.galeria.some(x=>x.id===g.id))deny('Esta foto já está na galeria.',409);
+   if(!f.eventos.some(e=>e.id===g.eventoId))deny('Escolha o evento.',400);const turma=clip(g.turma,60),crianca=clip(g.crianca,80);if(!turma)deny('Informe a turma.',400);if(!crianca)deny('Informe o nome da criança.',400);
+   if(!await bucket.get('cei/galeria/'+g.id)||!await bucket.get('cei/galeria/'+g.id+'-t'))deny('A foto não foi enviada por inteiro. Envie de novo.',400);
+   if(f.galeria.length>=3000)deny('Limite de 3000 fotos na galeria.',400);garantirCodigo(f,g.eventoId,turma);f.galeria.push({id:g.id,eventoId:g.eventoId,turma,crianca,bytes:Math.max(0,Math.min(Number(g.bytes)||0,1e9)),criadoEm:new Date().toISOString()})}
+  else if(input.galeriaEditar){const g=f.galeria.find(x=>x.id===input.galeriaEditar.id);if(!g)deny('Foto não encontrada. Recarregue a página.',404);const turma=clip(input.galeriaEditar.turma,60),crianca=clip(input.galeriaEditar.crianca,80);if(!turma||!crianca)deny('Informe a turma e o nome da criança.',400);g.turma=turma;g.crianca=crianca;garantirCodigo(f,g.eventoId,turma)}
+  else if(input.galeriaExcluir){const g=f.galeria.find(x=>x.id===input.galeriaExcluir);if(!g)deny('Foto não encontrada. Recarregue a página.',404);if(f.pedidos.some(o=>(o.escolhidas||[]).some(x=>x.fotoId===g.id)))deny('Esta foto está em um pedido. Não dá para remover.',400);
+   f.galeria=f.galeria.filter(x=>x.id!==g.id);await bucket.delete('cei/galeria/'+g.id);await bucket.delete('cei/galeria/'+g.id+'-t')}
+  else if(input.codigo){const c=input.codigo,k=f.codigos.find(x=>x.eventoId===c.eventoId&&x.turma===clip(c.turma,60));if(!k)deny('Turma não encontrada nesta galeria.',404);
+   if(c.acao==='novo')k.codigo=novoCodigo(f);else if(c.acao==='ativar')k.ativo=true;else if(c.acao==='desativar')k.ativo=false;else deny('Ação inválida.',400)}
   else if(input.evento){const old=f.eventos.find(e=>e.id===input.evento.id);if(input.evento.id&&!old)deny('Evento não encontrado. Recarregue a página.',404);
    const ev=cleanEventoFoto(input.evento,old,user);f.eventos=f.eventos.filter(e=>e.id!==ev.id);f.eventos.push(ev);
    for(const o of f.pedidos)if(o.eventoId===ev.id)o.eventoNome=ev.nome}
@@ -321,6 +367,7 @@ export async function portalApi(request,bucket,user,listRecords,env={}){
   else{const old=f.pedidos.find(o=>o.id===input.pedido?.id);if(input.pedido?.id&&!old)deny('Pedido não encontrado. Recarregue a página.',404);
    const ped=cleanPedidoFoto(input.pedido||{},old,p,user),antes=new Set((old?.anexos||[]).map(a=>a.id));
    for(const a of ped.anexos)if(!antes.has(a.id)&&!await bucket.get('cei/pedidos-fotos/'+a.id))deny('Um anexo não foi enviado. Anexe o arquivo de novo.',400);
+   if(old?.origem)ped.origem=old.origem;if(old?.escolhidas)ped.escolhidas=old.escolhidas; // v68: o pedido online mantém a origem e as fotos escolhidas quando a administração edita
    f.pedidos=f.pedidos.filter(o=>o.id!==ped.id);f.pedidos.push(ped)}
   if(f.pedidos.length>5000)deny('Limite de 5000 pedidos atingido. Exclua pedidos antigos.',400);if(f.eventos.length>100)deny('Limite de 100 eventos atingido.',400);
  }else if(path==='/api/portal/links'){

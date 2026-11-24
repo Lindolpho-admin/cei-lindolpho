@@ -2,7 +2,7 @@
 // painel inicial com pendências, menu agrupado e menu no celular.
 // Carregado depois de app.js, portal.js, child-report.js e food-practice.js.
 (() => {
-const CX_VERSION = '67';
+const CX_VERSION = '68';
 window.CEI_VERSION = CX_VERSION;
 const CX_SESSION = window.CEI_SESSION || {};
 const CX_TEACHER = CX_SESSION.role === 'teacher';
@@ -2715,9 +2715,9 @@ function cxFoConteudo() {
   if (cxFo.aba === 'eventos') { el.innerHTML = cxFoEventosHtml(); return; }
   const f = cxFo.f, evs = cxFoEventos(), todos = cxFoPedidos().filter(o => !f.evento || o.eventoId === f.evento);
   const falta = todos.reduce((s, o) => s + cxFoFalta(o), 0), recebido = todos.reduce((s, o) => s + (o.recebido || 0), 0), prontos = todos.filter(o => o.situacao === 'pronto').length;
-  const filtros = [['', 'Todos'], ['falta', 'Falta pagar'], ['pronto', 'Pronto para avisar'], ['producao', 'Em produção'], ['entregue', 'Entregues']];
+  const filtros = [['', 'Todos'], ['online', 'Online a conferir'], ['falta', 'Falta pagar'], ['pronto', 'Pronto para avisar'], ['producao', 'Em produção'], ['entregue', 'Entregues']];
   const q = f.q.trim().toLowerCase();
-  const lista = todos.filter(o => (!f.filtro || (f.filtro === 'falta' ? cxFoFalta(o) > 0 : o.situacao === f.filtro)) && (!q || `${o.responsavel} ${o.crianca} ${o.turma} ${o.telefone}`.toLowerCase().includes(q)));
+  const lista = todos.filter(o => (!f.filtro || (f.filtro === 'online' ? o.origem === 'online' && o.pagamento === 'pendente' : f.filtro === 'falta' ? cxFoFalta(o) > 0 : o.situacao === f.filtro)) && (!q || `${o.responsavel} ${o.crianca} ${o.turma} ${o.telefone}`.toLowerCase().includes(q)));
   el.innerHTML = `<div class="cx-bh-cards mini">
       <div class="cx-bh-card"><small>Pedidos</small><b>${todos.length}</b><span>${todos.reduce((s, o) => s + o.fotos, 0)} foto(s)</span></div>
       <div class="cx-bh-card ${falta ? 'neg' : ''}"><small>Falta pagar</small><b>${cxMoney(falta)}</b><span>${todos.filter(o => cxFoFalta(o) > 0).length} pedido(s) em aberto</span></div>
@@ -2728,13 +2728,13 @@ function cxFoConteudo() {
       ${filtros.map(([k, t]) => `<button class="cx-chip ${f.filtro === k ? 'ok' : ''}" style="padding:7px 12px;font-size:12.5px" onclick="cxFoFiltro('filtro','${k}')">${t}</button>`).join('')}
       <input type="search" placeholder="Buscar pai, criança ou turma" value="${cxEsc(f.q)}" oninput="cxFoFiltro('q',this.value)" style="flex:1;min-width:200px"></div>
     ${lista.length ? `<div class="cx-table-wrap"><table class="cx-table"><thead><tr><th>Responsável</th><th>Criança / turma</th><th>Fotos pedidas</th><th>Pagamento</th><th>Situação</th><th>Anexos</th><th></th></tr></thead><tbody>
-      ${lista.map(o => `<tr><td><b>${cxEsc(o.responsavel)}</b><br><span class="muted">${cxEsc(o.telefone)}</span></td>
+      ${lista.map(o => `<tr><td><b>${cxEsc(o.responsavel)}</b>${o.origem === 'online' ? ' <span class="cx-chip" title="Pedido feito pela família na página de fotos">Online · ' + cxEsc(o.id.slice(0, 6).toUpperCase()) + '</span>' : ''}<br><span class="muted">${cxEsc(o.telefone)}</span></td>
         <td>${cxEsc(o.crianca)}${o.turma ? `<br><span class="muted">${cxEsc(o.turma)}</span>` : ''}</td>
         <td>${cxEsc(cxFoItensTxt(o))}<br><b>${cxMoney(o.total)}</b> <span class="muted">(${cxFoValTxt(o)})</span></td>
         <td><span class="cx-chip ${o.pagamento === 'pago' ? 'ok' : o.pagamento === 'parcial' ? 'warn' : 'bad'}">${CX_FO_PAG[o.pagamento]}</span>${cxFoFalta(o) ? `<br><span class="muted">falta ${cxMoney(cxFoFalta(o))}</span>` : ''}</td>
         <td><span class="cx-chip ${o.situacao === 'entregue' ? 'ok' : o.situacao === 'pronto' ? 'warn' : ''}">${CX_FO_SIT[o.situacao]}</span></td>
         <td>${(o.anexos || []).length ? `${o.anexos.length} anexo(s)` : '<span class="muted">nenhum</span>'}</td>
-        <td style="white-space:nowrap"><button class="cx-btn small" onclick="cxFoForm('${o.id}')">Abrir</button> ${o.recebido ? `<button class="cx-btn small" onclick="cxFoReciboId('${o.id}')" title="Gerar recibo para assinatura" aria-label="Gerar recibo de ${cxEsc(o.responsavel)}">🧾</button> ` : ''}<button class="cx-btn small" onclick="cxFoZap('${o.id}')" title="Avisar pelo WhatsApp que ficou pronto" aria-label="Avisar ${cxEsc(o.responsavel)} pelo WhatsApp">📲</button></td></tr>`).join('')}
+        <td style="white-space:nowrap"><button class="cx-btn small" onclick="cxFoForm('${o.id}')">Abrir</button> ${o.origem === 'online' && o.pagamento === 'pendente' ? `<button class="cx-btn small primary" onclick="cxFoConfirmar('${o.id}')" title="Conferi o Pix no extrato">✔ Pix conferido</button> ` : ''}${(o.escolhidas || []).length ? `<button class="cx-btn small" onclick="cxFoPasta(['${o.id}'])" title="Baixar a pasta para revelar deste pedido" aria-label="Pasta para revelar de ${cxEsc(o.responsavel)}">📁</button> ` : ''}${o.recebido ? `<button class="cx-btn small" onclick="cxFoReciboId('${o.id}')" title="Gerar recibo para assinatura" aria-label="Gerar recibo de ${cxEsc(o.responsavel)}">🧾</button> ` : ''}<button class="cx-btn small" onclick="cxFoZap('${o.id}')" title="Avisar pelo WhatsApp que ficou pronto" aria-label="Avisar ${cxEsc(o.responsavel)} pelo WhatsApp">📲</button></td></tr>`).join('')}
       </tbody></table></div>` : `<div class="cx-empty">${todos.length ? 'Nenhum pedido com esse filtro.' : 'Ainda não há pedidos. Clique em “+ Novo pedido”.'}</div>`}`;
 }
 window.cxFoFiltro = (k, v) => { cxFo.f[k] = v; if (k === 'q') { clearTimeout(cxFo.t); cxFo.t = setTimeout(() => { cxFoConteudo(); const i = document.querySelector('.cx-bh-filtros input[type=search]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 200); } else cxFoConteudo(); };
@@ -2746,7 +2746,9 @@ function cxFoEventosHtml() {
   return `<div style="display:flex;justify-content:flex-end;margin:8px 0"><button class="cx-btn primary" onclick="cxFoEvForm('')">+ Criar evento</button></div>
     ${evs.map(e => { const n = (cxFo.dados.pedidos || []).filter(o => o.eventoId === e.id).length;
       return `<div class="cx-item" style="padding:12px 0;border-top:1px solid #eef1f5"><div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"><b style="flex:1">${cxEsc(e.nome)}</b><span class="cx-chip ${e.aberto ? 'ok' : ''}">${e.aberto ? 'Evento aberto' : 'Encerrado'}</span><span class="muted">${n} pedido(s)</span>
-        <button class="cx-btn small" onclick="cxFoEvForm('${e.id}')">Editar preços</button><button class="cx-btn small" onclick="cxFoVerPedidos('${e.id}')">Ver pedidos</button></div>
+        <button class="cx-btn small" onclick="cxFoEvForm('${e.id}')">Editar preços</button><button class="cx-btn small" onclick="cxFoVerPedidos('${e.id}')">Ver pedidos</button>
+        <button class="cx-btn small" onclick="cxFoGaleria('${e.id}')">📸 Galeria (${(cxFo.dados.galeria || []).filter(g => g.eventoId === e.id).length})</button>
+        <button class="cx-btn small" onclick="cxFoPastaEvento('${e.id}')" title="Baixar os pedidos pagos, prontos para enviar à revelação">📁 Pasta para revelar</button></div>
         <p class="muted" style="margin:6px 0 0;line-height:1.6">${cxFoFaixasHtml(e)}</p></div>`; }).join('')}
     <p class="hint">Cada tamanho tem a sua tabela, e a faixa vale pela <b>quantidade de fotos daquele tamanho</b> no pedido. Mudar a tabela não altera pedidos já salvos; só vale para os próximos (ou quando um pedido for editado e salvo de novo).</p>`;
 }
@@ -2773,6 +2775,7 @@ function cxFoEvTabsHtml() {
 function cxFoEvLer() {
   const f = document.getElementById('cxFoEvF'); if (!f) return;
   cxFo.ev.nome = f.elements.nome.value; cxFo.ev.aberto = f.elements.aberto.checked;
+  if (f.elements.pixChave) cxFo.ev.pix = {chave: f.elements.pixChave.value, nome: f.elements.pixNome.value, cidade: f.elements.pixCidade.value};
   for (const tam of CX_FO_TAM) { const t = cxFo.ev.tabs[tam];
     t.on = f.elements['on_' + tam].checked;
     t.faixas = t.faixas.map((x, i) => ({ate: f.elements[`ate_${tam}_${i}`].value, valor: cxParseMoney(f.elements[`valor_${tam}_${i}`].value || '0')})); }
@@ -2794,7 +2797,7 @@ window.cxFoEvForm = id => {
   const tabs = {}, doEvento = tam => (e.tabelas ? e.tabelas[tam] : e.faixas);
   for (const tam of CX_FO_TAM) { const fx = e && doEvento(tam); tabs[tam] = fx ? {on: true, novo: false, faixas: fx.map(x => ({ate: x.ate == null ? '' : x.ate, valor: x.valor}))} : cxFoTabVazia(); }
   if (!e) { tabs['10x15'].on = true; tabs['10x15'].novo = false; }
-  cxFo.ev = {id: e?.id || '', nome: e?.nome || '', aberto: e ? e.aberto : true, tabs, legado: !!(e && !e.tabelas)};
+  cxFo.ev = {id: e?.id || '', nome: e?.nome || '', aberto: e ? e.aberto : true, tabs, legado: !!(e && !e.tabelas), pix: e?.pix || {chave: '09303966000172', nome: 'APP CEI LINDOLPHO', cidade: 'ARAQUARI'}};
   const n = e ? (cxFo.dados.pedidos || []).filter(o => o.eventoId === e.id).length : 0;
   cxModal(`<h2>${e ? 'Editar evento de venda' : 'Novo evento de venda'}</h2>
     <form class="cx-form cx-static-actions" id="cxFoEvF" onsubmit="event.preventDefault();cxFoEvSalvar()">
@@ -2802,6 +2805,11 @@ window.cxFoEvForm = id => {
       <p class="hint full">Cada tamanho tem a sua tabela de preços. A faixa vale pela <b>quantidade de fotos daquele tamanho</b> no pedido. Exemplo para 10 × 15: 1 a 4 fotos R$ 10,00 cada · 5 ou mais R$ 6,00 cada (5 fotos = R$ 30,00). Deixe o “Até” da última faixa vazio para valer de lá em diante.</p>
       ${cxFo.ev.legado ? '<p class="hint full" style="color:#8a5d00"><b>Este evento usava o mesmo preço para todos os tamanhos.</b> Ao salvar, os valores abaixo passam a valer por tamanho (comece ajustando os tamanhos maiores).</p>' : ''}
       <div class="full" id="cxFoEvTabs" style="display:grid;gap:12px">${cxFoEvTabsHtml()}</div>
+      <fieldset class="cx-fieldset full"><legend>Pix que as famílias veem na página de fotos</legend>
+        <label>Chave Pix *<input name="pixChave" required maxlength="77" data-case="off" value="${cxEsc(cxFo.ev.pix.chave)}"></label>
+        <label>Nome de quem recebe *<input name="pixNome" required maxlength="25" data-case="off" value="${cxEsc(cxFo.ev.pix.nome)}"></label>
+        <label>Cidade *<input name="pixCidade" required maxlength="15" data-case="off" value="${cxEsc(cxFo.ev.pix.cidade)}"></label>
+        <p class="hint full">Já vem com o CNPJ da APP. O nome e a cidade vão no QR code; sem acentos.</p></fieldset>
       <label class="cx-check full"><input type="checkbox" name="aberto" ${cxFo.ev.aberto ? 'checked' : ''}> Evento aberto (aceita novos pedidos)</label>
       <p class="hint full">Mudar os preços não altera pedidos já salvos; só vale para os próximos (ou quando um pedido for editado e salvo de novo).</p>
       <p class="hint full" id="cxFoEvErr" style="color:#b3261e" hidden></p>
@@ -2823,7 +2831,7 @@ window.cxFoEvSalvar = async () => {
     tabelas[tam] = faixas;
   }
   if (!Object.keys(tabelas).length) return mostra('Marque pelo menos um tamanho de foto para vender neste evento.');
-  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({evento: {id: cxFo.ev.id || undefined, nome: cxFo.ev.nome, aberto: cxFo.ev.aberto, tabelas}})}); notify('Evento salvo.'); cxCloseModal(); render(); }
+  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({evento: {id: cxFo.ev.id || undefined, nome: cxFo.ev.nome, aberto: cxFo.ev.aberto, tabelas, pix: cxFo.ev.pix}})}); notify('Evento salvo.'); cxCloseModal(); render(); }
   catch (e) { mostra(e.message); }
 };
 window.cxFoEvExcluir = async id => { if (!confirm('Excluir este evento de venda? Ele não tem pedidos.')) return; try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({excluirEvento: id})}); notify('Evento excluído.'); cxCloseModal(); render(); } catch (e) { notify(e.message); } };
@@ -2947,5 +2955,130 @@ window.cxFoSalvar = async () => {
 window.cxFoExcluir = async id => {
   const o = (cxFo.dados?.pedidos || []).find(x => x.id === id); if (!o || !confirm(`Excluir o pedido de ${o.responsavel} (${o.crianca})? Os anexos também serão apagados.`)) return;
   try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({id, delete: true})}); notify('Pedido excluído.'); cxCloseModal(); render(); } catch (e) { notify(e.message); }
+};
+
+/* ---------- v68: galeria das famílias, pedido online e pasta para revelar ---------- */
+const cxFoCodigos = evId => (cxFo.dados?.codigos || []).filter(k => k.eventoId === evId);
+const cxFoLink = c => location.origin + '/fotos#c=' + c;
+const cxFoNumero = o => String(o.id).slice(0, 6).toUpperCase();
+window.cxFoConfirmar = async id => {
+  const o = (cxFo.dados?.pedidos || []).find(x => x.id === id); if (!o) return;
+  if (!confirm(`Você conferiu no extrato do banco o Pix de ${o.responsavel} (${cxMoney(o.total)})?\n\nO pedido ficará como Pago.`)) return;
+  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({pedido: {...o, itens: o.itens.map(i => ({tam: i.tam, qtd: i.qtd})), anexos: o.anexos, pagamento: 'pago', forma: 'pix'}})}); notify('Pagamento confirmado.'); render(); }
+  catch (e) { notify(e.message); }
+};
+function cxFoGalHtml() {
+  const evId = cxFo.gal.evId, cods = cxFoCodigos(evId), fotos = (cxFo.dados.galeria || []).filter(g => g.eventoId === evId); cxFo.gal.cods = cods;
+  return `<datalist id="cxFoTurmas">${cods.map(k => `<option value="${cxEsc(k.turma)}">`).join('')}</datalist>
+    <div style="display:block;border:1px dashed #9fb3c8;border-radius:10px;padding:12px;margin:8px 0"><b>Enviar fotos</b>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-top:8px"><label style="flex:1;min-width:180px">Turma<input id="cxFoGalTurma" list="cxFoTurmas" maxlength="60" placeholder="Ex.: Maternal II"></label>
+        <label style="flex:2;min-width:220px">Fotos (JPG ou PNG, uma por criança)<input id="cxFoGalArq" type="file" multiple accept="image/jpeg,image/png"></label>
+        <button class="cx-btn primary" id="cxFoGalBtn" onclick="cxFoGalEnviar()">Enviar fotos</button></div>
+      <p class="hint" style="margin:8px 0 0">Dica: nomeie cada arquivo com o nome da criança (ex.: <i>Lucas Silva.jpg</i>) e o nome já vem certo. Os originais ficam guardados em alta qualidade; a família baixa o original de graça.</p>
+      <p class="hint" id="cxFoGalMsg" role="status" style="margin:6px 0 0"></p></div>
+    ${cods.length ? cods.map((k, i) => { const fs = fotos.filter(g => g.turma === k.turma).sort((a, b) => a.crianca.localeCompare(b.crianca, 'pt-BR'));
+      return `<div style="display:block;border-top:1px solid #eef1f5;padding:12px 0"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><b style="font-size:16px">${cxEsc(k.turma)}</b><span class="cx-chip">Código <b style="letter-spacing:.1em">${k.codigo}</b></span><span class="cx-chip ${k.ativo === false ? 'bad' : 'ok'}">${k.ativo === false ? 'Pausada' : 'Aberta'}</span><span class="muted">${fs.length} foto(s)</span>
+        <span style="flex:1"></span><button class="cx-btn small" onclick="cxFoGalCodigo(${i},'link')">Copiar link</button><button class="cx-btn small" onclick="cxFoGalCodigo(${i},'zap')">📲 Mandar no WhatsApp</button><button class="cx-btn small" onclick="cxFoGalCodigo(${i},'${k.ativo === false ? 'ativar' : 'desativar'}')">${k.ativo === false ? 'Reabrir' : 'Pausar link'}</button><button class="cx-btn small" onclick="cxFoGalCodigo(${i},'novo')" title="O código antigo deixa de funcionar">Novo código</button></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:10px">${fs.map(g => `<div style="text-align:center;font-size:13px"><img src="/api/portal/galeria-arquivo/${g.id}?t=t" alt="Foto de ${cxEsc(g.crianca)}" loading="lazy" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:#e9edf2"><div style="font-weight:600;margin:4px 0">${cxEsc(g.crianca)}</div><button class="cx-btn small" onclick="cxFoGalRenomear('${g.id}')">Nome</button> <button class="cx-btn small danger" onclick="cxFoGalRemover('${g.id}')" aria-label="Remover foto de ${cxEsc(g.crianca)}">✕</button></div>`).join('')}</div></div>`; }).join('') : '<p class="muted">Ainda não há fotos. Escolha a turma e envie as fotos acima: o código da turma é criado sozinho.</p>'}`;
+}
+window.cxFoGaleria = id => {
+  const e = cxFoEvento(id); if (!e) return notify('Evento não encontrado.'); cxFo.gal = {evId: id, cods: []};
+  cxModal(`<h2>Galeria — ${cxEsc(e.nome)}</h2><p class="hint">Cada turma tem um código. Mande o link e o código aos pais pelo WhatsApp: eles baixam a foto digital de graça e, se quiserem, pedem a impressão e pagam por Pix.</p><div id="cxFoGal">${cxFoGalHtml()}</div><div class="actions"><button onclick="cxCloseModal();render()">Fechar</button></div>`);
+};
+async function cxFoGalAtualizar() { await cxFoLoad(); const b = document.getElementById('cxFoGal'); if (b) { const t = document.getElementById('cxFoGalMsg')?.textContent; b.innerHTML = cxFoGalHtml(); document.getElementById('cxFoGalMsg').textContent = t || ''; } }
+window.cxFoGalCodigo = async (i, acao) => {
+  const k = cxFo.gal.cods[i]; if (!k) return;
+  if (acao === 'link' || acao === 'zap') {
+    const link = cxFoLink(k.codigo), txt = `Olá! As fotos da turma ${k.turma} estão no link abaixo. Código da turma: ${k.codigo}\n${link}\n\nA foto digital é um presente do CEI: é só baixar. Quem quiser a foto impressa pode pedir pelo mesmo link e pagar por Pix.`;
+    if (acao === 'zap') return void window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank', 'noopener');
+    try { await navigator.clipboard.writeText(link); notify('Link copiado.'); } catch { prompt('Copie o link:', link); } return;
+  }
+  if (acao === 'novo' && !confirm('Gerar um código novo? O código e o link antigos deixam de funcionar.')) return;
+  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({codigo: {eventoId: k.eventoId, turma: k.turma, acao}})}); await cxFoGalAtualizar(); } catch (e) { notify(e.message); }
+};
+window.cxFoGalRenomear = async id => {
+  const g = (cxFo.dados.galeria || []).find(x => x.id === id); if (!g) return; const nome = prompt('Nome da criança:', g.crianca); if (nome == null || !nome.trim()) return;
+  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({galeriaEditar: {id, crianca: nome.trim(), turma: g.turma}})}); await cxFoGalAtualizar(); } catch (e) { notify(e.message); }
+};
+window.cxFoGalRemover = async id => {
+  const g = (cxFo.dados.galeria || []).find(x => x.id === id); if (!g || !confirm(`Remover a foto de ${g.crianca}? O original também é apagado.`)) return;
+  try { await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({galeriaExcluir: id})}); await cxFoGalAtualizar(); } catch (e) { notify(e.message); }
+};
+async function cxFoMiniatura(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('não consegui abrir a imagem')); i.src = url; });
+    const k = Math.min(1, 480 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    let blob = null; for (const q of [0.8, 0.6, 0.4]) { blob = await new Promise(r => c.toBlob(r, 'image/jpeg', q)); if (blob && blob.size <= 380 * 1024) break; }
+    if (!blob || blob.size > 390 * 1024) throw new Error('miniatura grande demais'); return blob;
+  } finally { URL.revokeObjectURL(url); }
+}
+window.cxFoGalEnviar = async () => {
+  const inp = document.getElementById('cxFoGalArq'), turma = document.getElementById('cxFoGalTurma').value.trim(), msg = document.getElementById('cxFoGalMsg'), btn = document.getElementById('cxFoGalBtn'), files = [...inp.files];
+  if (!turma) { msg.textContent = 'Informe a turma.'; return; } if (!files.length) { msg.textContent = 'Escolha as fotos.'; return; }
+  btn.disabled = true; const falhas = []; let ok = 0;
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i]; msg.textContent = `Enviando ${i + 1} de ${files.length}: ${f.name}`;
+    try {
+      if (!/^image\/(jpeg|png)$/.test(f.type)) throw new Error('só JPG ou PNG'); if (f.size > 15 * 1024 * 1024) throw new Error('acima de 15 MB');
+      const id = crypto.randomUUID(), mini = await cxFoMiniatura(f);
+      await cxRequest(`/api/portal/galeria-arquivo?id=${id}&t=o`, {method: 'POST', headers: {'Content-Type': f.type}, body: f});
+      await cxRequest(`/api/portal/galeria-arquivo?id=${id}&t=t`, {method: 'POST', headers: {'Content-Type': 'image/jpeg'}, body: mini});
+      await cxRequest('/api/portal/fotos', {method: 'POST', body: JSON.stringify({galeriaFoto: {id, eventoId: cxFo.gal.evId, turma, crianca: f.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim().slice(0, 80) || 'Sem nome', bytes: f.size}})});
+      ok++;
+    } catch (e) { falhas.push(`${f.name}: ${e.message}`); }
+  }
+  inp.value = ''; btn.disabled = false; await cxFoGalAtualizar();
+  const m2 = document.getElementById('cxFoGalMsg'); if (m2) m2.textContent = `${ok} foto(s) enviada(s).` + (falhas.length ? ` Não enviou: ${falhas.join(' · ')}` : '');
+};
+/* Pasta para revelar: um ZIP com os originais por tamanho, os comprovantes e uma folha-resumo para o laboratório. */
+function cxZipBin(files) {
+  const enc = new TextEncoder(), u16 = n => [n & 255, n >> 8 & 255], u32 = n => [n & 255, n >> 8 & 255, n >> 16 & 255, n >> 24 & 255], partes = [], cen = []; let off = 0;
+  for (const f of files) {
+    const nm = enc.encode(f.name), dados = f.data, crc = cxCrc32(dados), sz = dados.length;
+    const lh = new Uint8Array([0x50, 0x4b, 3, 4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0)]);
+    partes.push(lh, nm, dados);
+    cen.push(new Uint8Array([0x50, 0x4b, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+    off += lh.length + nm.length + sz;
+  }
+  const cenLen = cen.reduce((t, a) => t + a.length, 0);
+  return new Blob([...partes, ...cen, new Uint8Array([0x50, 0x4b, 5, 6, 0, 0, 0, 0, ...u16(files.length), ...u16(files.length), ...u32(cenLen), ...u32(off), 0, 0])], {type: 'application/zip'});
+}
+window.cxZipBin = cxZipBin;
+const cxFoNomeArq = t => String(t).replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+const cxFoExt = mime => mime === 'image/png' ? 'png' : mime === 'application/pdf' ? 'pdf' : 'jpg';
+window.cxFoPastaEvento = id => {
+  const ev = cxFoEvento(id), ped = (cxFo.dados.pedidos || []).filter(o => o.eventoId === id && o.pagamento === 'pago' && (o.escolhidas || []).length);
+  if (!ped.length) return void notify('Ainda não há pedidos pagos com fotos da galeria neste evento.');
+  cxFoPasta(ped.map(o => o.id), ev?.nome);
+};
+window.cxFoPasta = async (ids, nomeEvento) => {
+  const ped = ids.map(id => (cxFo.dados.pedidos || []).find(o => o.id === id)).filter(o => o && (o.escolhidas || []).length);
+  if (!ped.length) return void notify('Nenhum pedido com fotos da galeria.');
+  const naoPagos = ped.filter(o => o.pagamento !== 'pago');
+  if (naoPagos.length && !confirm(`${naoPagos.length} pedido(s) ainda não estão como Pago. Gerar a pasta mesmo assim?`)) return;
+  const galeria = new Map((cxFo.dados.galeria || []).map(g => [g.id, g])), bytes = ped.reduce((s, o) => s + o.escolhidas.reduce((t, x) => t + (galeria.get(x.fotoId)?.bytes || 0), 0), 0);
+  if (bytes > 250 * 1024 * 1024 && !confirm(`Os originais somam cerca de ${Math.round(bytes / 1048576)} MB e o navegador pode ficar lento. Continuar?`)) return;
+  const arquivos = [], enc = new TextEncoder(), linhas = [], tot = {};
+  const baixa = async url => { const r = await fetch(url, {cache: 'no-store'}); if (!r.ok) throw new Error('arquivo não encontrado'); return {mime: r.headers.get('content-type') || '', data: new Uint8Array(await r.arrayBuffer())}; };
+  notify(`Montando a pasta (${ped.length} pedido[s])… aguarde.`);
+  try {
+    for (const o of ped) {
+      const num = cxFoNumero(o), crianca = id => galeria.get(id)?.crianca || o.crianca;
+      for (const x of o.escolhidas) {
+        const a = await baixa('/api/portal/galeria-arquivo/' + x.fotoId);
+        arquivos.push({name: `${cxFoTam(x.tam).replace(/ /g, '')} cm/${cxFoNomeArq(`${num} - ${crianca(x.fotoId)} - ${x.qtd} un`)}.${cxFoExt(a.mime)}`, data: a.data});
+        tot[x.tam] = (tot[x.tam] || 0) + x.qtd; linhas.push(`${num} | ${crianca(x.fotoId)} | ${cxFoTam(x.tam)} cm × ${x.qtd} | ${o.turma || ''} | responsável: ${o.responsavel} | ${o.telefone}`);
+      }
+      const comp = (o.anexos || []).find(a => a.tipo === 'comprovante') || (o.anexos || [])[0];
+      if (comp) { try { const a = await baixa('/api/portal/anexo-pedido/' + comp.id); arquivos.push({name: `comprovantes/${cxFoNomeArq(`${num} - ${o.responsavel}`)}.${cxFoExt(a.mime)}`, data: a.data}); } catch { linhas.push(`${num} | (comprovante não encontrado)`); } }
+    }
+  } catch (e) { return void notify('Não consegui montar a pasta: ' + e.message); }
+  const evNome = nomeEvento || ped[0].eventoNome || 'Fotos', dataHoje = cxToday();
+  const resumo = [`FOTOS PARA REVELAR — ${evNome}`, `Gerado em ${dataHoje.split('-').reverse().join('/')} · ${ped.length} pedido(s)`, '', 'QUANTIDADE POR TAMANHO', ...Object.keys(tot).sort().map(t => `  ${cxFoTam(t)} cm: ${tot[t]} foto(s)`), `  Total: ${Object.values(tot).reduce((s, n) => s + n, 0)} foto(s)`, '', 'ARQUIVOS (número | criança | tamanho × quantidade | turma | responsável | telefone)', ...linhas, '', 'Cada tamanho tem a sua pasta. O nome de cada foto começa com o número do pedido.'].join('\n');
+  arquivos.push({name: 'resumo-para-laboratorio.txt', data: enc.encode('﻿' + resumo)});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(cxZipBin(arquivos)); a.download = cxFoNomeArq(`Fotos para revelar - ${evNome} - ${dataHoje}`) + '.zip'; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  notify('Pasta pronta: veja a pasta de downloads.');
 };
 })();

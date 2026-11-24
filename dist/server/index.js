@@ -1,4 +1,4 @@
-import {identity, teacherState, mergeTeacher, portalApi, fotosPublicas} from './access.js';
+import {identity, teacherState, mergeTeacher, portalApi, fotosPublicas, acharCodigo, fotoDoCodigo} from './access.js';
 import {handleAuthRoute, prepareRequest} from './auth.js';
 import { assets } from "./assets.js";
 import { seededDocuments } from "./seeded.js";
@@ -406,6 +406,8 @@ export default {
         if (!['GET','HEAD'].includes(request.method))return fail('Operação não permitida.',405);
         // v55: a prévia do link no WhatsApp/Facebook precisa do endereço completo da foto da fachada.
         if(url.pathname==='/'||url.pathname==='/public.html'){const r=await serveAsset(new URL('/public.html',url));if(!r.ok)return r;const h=new Headers(r.headers);h.delete('Content-Length');return new Response((await r.text()).replaceAll('__ORIGEM__',url.origin),{status:r.status,headers:h});}
+        // v68: galeria e pedido de fotos pelas famílias (acesso por código; fora dos buscadores).
+        if(url.pathname==='/fotos'||url.pathname==='/fotos.html'){const r=serveAsset(new URL('/fotos.html',url));if(!r.ok)return r;const h=new Headers(r.headers);h.set('X-Robots-Tag','noindex, nofollow');h.set('Referrer-Policy','no-referrer');return new Response(r.body,{status:r.status,headers:h});}
         if(['/admin','/docentes','/restrito','/index.html'].includes(url.pathname)){
           if(!['admin','teacher'].includes(user.role))return serveAsset(new URL('/access.html',url));
           // Decode UTF-8 once before injecting the trusted session.
@@ -439,6 +441,37 @@ export default {
         const obj=await bucket.get('cei/pedidos-fotos/'+ap[1]);if(!obj)return fail('Anexo não encontrado.',404);
         return new Response(obj.body,{headers:{'Content-Type':obj.httpMetadata?.contentType||'application/octet-stream','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Disposition':'inline'}});
       }
+      // v68: arquivos da galeria. A administração envia e lê tudo; a família lê só pelo código da turma.
+      const ehImg=b=>b[0]===0xff&&b[1]===0xd8&&b[2]===0xff?'image/jpeg':b[0]===0x89&&b[1]===0x50&&b[2]===0x4e&&b[3]===0x47?'image/png':'';
+      if(url.pathname==='/api/portal/galeria-arquivo'&&request.method==='POST'){
+        if(user.role!=='admin')return fail('Operação exclusiva da administração.',403);
+        const id=url.searchParams.get('id')||'',parte=url.searchParams.get('t')==='t'?'t':'o';if(!/^[a-f0-9-]{36}$/.test(id))return fail('Foto inválida.',400);
+        const max=parte==='t'?400*1024:15*1024*1024;if(Number(request.headers.get('Content-Length')||0)>max)return fail(parte==='t'?'Miniatura acima de 400 KB.':'Foto acima de 15 MB.',413);
+        const bytes=new Uint8Array(await request.arrayBuffer()),mime=ehImg(bytes);if(!mime||bytes.length>max)return fail('Envie uma foto JPG ou PNG de até '+(parte==='t'?'400 KB':'15 MB')+'.',400);
+        await bucket.put('cei/galeria/'+id+(parte==='t'?'-t':''),bytes,{httpMetadata:{contentType:mime}});return Response.json({id},{headers:{'Cache-Control':'no-store'}});
+      }
+      const ga=url.pathname.match(/^\/api\/portal\/galeria-arquivo\/([a-f0-9-]{36})$/);
+      if(ga&&request.method==='GET'){
+        if(user.role!=='admin')return fail('Foto não disponível.',404);
+        const obj=await bucket.get('cei/galeria/'+ga[1]+(url.searchParams.get('t')==='t'?'-t':''));if(!obj)return fail('Foto não encontrada.',404);
+        return new Response(obj.body,{headers:{'Content-Type':obj.httpMetadata?.contentType||'image/jpeg','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+      }
+      const gp=url.pathname.match(/^\/api\/public\/galeria\/img\/([a-f0-9-]{36})$/);
+      if(gp&&request.method==='GET'){
+        if(!fotoDoCodigo(user.data.portal||{},url.searchParams.get('c'),gp[1]))return fail('Foto não disponível.',404);
+        const orig=url.searchParams.get('t')==='o',obj=await bucket.get('cei/galeria/'+gp[1]+(orig?'':'-t'));if(!obj)return fail('Foto não encontrada.',404);
+        const h={'Content-Type':obj.httpMetadata?.contentType||'image/jpeg','Cache-Control':'private, max-age=600','X-Content-Type-Options':'nosniff','X-Robots-Tag':'noindex'};
+        if(orig&&url.searchParams.get('dl')==='1')h['Content-Disposition']='attachment; filename="foto-'+gp[1].slice(0,8)+(h['Content-Type']==='image/png'?'.png':'.jpg')+'"';
+        return new Response(obj.body,{headers:h});
+      }
+      if(url.pathname==='/api/public/galeria/anexo'&&request.method==='POST'){
+        const a=acharCodigo(user.data.portal||{},url.searchParams.get('c'));if(!a||a.ev.aberto===false)return fail('Código não encontrado ou evento encerrado.',404);
+        if(Number(request.headers.get('Content-Length')||0)>1500*1024)return fail('Arquivo acima de 1,5 MB.',413);
+        const bytes=new Uint8Array(await request.arrayBuffer());
+        const mime=ehImg(bytes)||(bytes[0]===0x25&&bytes[1]===0x50&&bytes[2]===0x44&&bytes[3]===0x46?'application/pdf':'');
+        if(!mime||bytes.length>1500*1024)return fail('Envie uma imagem (JPG ou PNG) ou um PDF de até 1,5 MB.',400);
+        const id=crypto.randomUUID();await bucket.put('cei/pedidos-fotos/'+id,bytes,{httpMetadata:{contentType:mime}});return Response.json({id,mime},{headers:{'Cache-Control':'no-store'}});
+      }
       const fo=url.pathname.match(/^\/api\/(portal|public)\/foto\/([a-f0-9-]{36})$/);
       if(fo&&request.method==='GET'){
         const allowed=fo[1]==='portal'?user.role==='admin':fotosPublicas(user.data.portal||{}).has(fo[2]);
@@ -446,7 +479,7 @@ export default {
         const obj=await bucket.get('cei/fotos/'+fo[2]);if(!obj)return fail('Foto não encontrada.',404);
         return new Response(obj.body,{headers:{'Content-Type':obj.httpMetadata?.contentType||'image/jpeg','Cache-Control':fo[1]==='public'?'public, max-age=300':'private, no-store','X-Content-Type-Options':'nosniff'}});
       }
-      if(url.pathname==='/api/session'||url.pathname==='/api/public/materials'||url.pathname==='/api/public/home'||url.pathname.startsWith('/api/portal/')){
+      if(url.pathname==='/api/session'||url.pathname==='/api/public/materials'||url.pathname==='/api/public/home'||url.pathname==='/api/public/galeria'||url.pathname==='/api/public/galeria/pedido'||url.pathname.startsWith('/api/portal/')){
         const run=async()=>{const b=await activeBucket(env.BUCKET);return reply(await portalApi(request,b,await identity(request,env,b),listRecords,env))};
         return await (request.method==='GET'?run():withWriteLock(env.BUCKET,run));
       }

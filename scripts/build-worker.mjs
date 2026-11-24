@@ -14,7 +14,7 @@ const types = {
 };
 // v47: carimba ?v=<hash do conteúdo> nos arquivos .js/.css citados pelas páginas,
 // para o navegador sempre baixar a versão nova depois de cada publicação.
-for (const page of ["index.html", "public.html", "access.html"]) {
+for (const page of ["index.html", "public.html", "access.html", "fotos.html"]) {
   const file = path.join(root, page);
   if (!fs.existsSync(file)) continue;
   const html = fs.readFileSync(file, "utf8").replace(/((?:src|href)=")(\/?)([\w.-]+\.(?:js|css))(?:\?v=[^"]*)?"/g, (all, attr, slash, name) => {
